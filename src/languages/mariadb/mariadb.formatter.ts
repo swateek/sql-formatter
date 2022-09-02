@@ -1,7 +1,7 @@
 import { expandPhrases } from 'src/expandPhrases';
 import Formatter from 'src/formatter/Formatter';
 import Tokenizer from 'src/lexer/Tokenizer';
-import { EOF_TOKEN, isToken, type Token, TokenType } from 'src/lexer/token';
+import { EOF_TOKEN, isToken, Token, TokenType } from 'src/lexer/token';
 import { keywords } from './mariadb.keywords';
 import { functions } from './mariadb.functions';
 
@@ -14,6 +14,7 @@ const reservedCommands = expandPhrases([
   'WHERE',
   'GROUP BY',
   'HAVING',
+  'PARTITION BY',
   'ORDER BY',
   'LIMIT',
   'OFFSET',
@@ -252,7 +253,12 @@ const reservedJoins = expandPhrases([
   'STRAIGHT_JOIN',
 ]);
 
-const reservedPhrases = ['ON DELETE', 'ON UPDATE', 'CHARACTER SET'];
+const reservedPhrases = expandPhrases([
+  'ON DELETE',
+  'ON UPDATE',
+  'CHARACTER SET',
+  '{ROWS | RANGE} BETWEEN',
+]);
 
 // For reference: https://mariadb.com/kb/en/sql-statements-structure/
 export default class MariaDbFormatter extends Formatter {
@@ -270,14 +276,11 @@ export default class MariaDbFormatter extends Formatter {
       reservedKeywords: keywords,
       reservedFunctionNames: functions,
       // TODO: support _ char set prefixes such as _utf8, _latin1, _binary, _utf8mb4, etc.
-      stringTypes: [
-        { quote: "''", prefixes: ['B', 'X'] },
-        { quote: '""', prefixes: ['B', 'X'] },
-      ],
+      stringTypes: [{ quote: "''", prefixes: ['B', 'X'] }, '""'],
       identTypes: ['``'],
       identChars: { first: '$', rest: '$', allowFirstCharNumber: true },
       variableTypes: [
-        { regex: '@[A-Za-z0-9_.$]+' },
+        { regex: '@@?[A-Za-z0-9_.$]+' },
         { quote: '""', prefixes: ['@'], requirePrefix: true },
         { quote: "''", prefixes: ['@'], requirePrefix: true },
         { quote: '``', prefixes: ['@'], requirePrefix: true },

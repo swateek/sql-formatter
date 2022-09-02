@@ -1,7 +1,7 @@
 import { expandPhrases } from 'src/expandPhrases';
 import Formatter from 'src/formatter/Formatter';
 import Tokenizer from 'src/lexer/Tokenizer';
-import { EOF_TOKEN, isToken, type Token, TokenType } from 'src/lexer/token';
+import { EOF_TOKEN, isToken, Token, TokenType } from 'src/lexer/token';
 import { keywords } from './spark.keywords';
 import { functions } from './spark.functions';
 
@@ -16,6 +16,7 @@ const reservedCommands = expandPhrases([
   'GROUP BY',
   'HAVING',
   'WINDOW',
+  'PARTITION BY',
   'ORDER BY',
   'SORT BY',
   'CLUSTER BY',
@@ -107,7 +108,12 @@ const reservedJoins = expandPhrases([
   'NATURAL [LEFT] {ANTI | SEMI} JOIN',
 ]);
 
-const reservedPhrases = ['ON DELETE', 'ON UPDATE', 'CURRENT ROW'];
+const reservedPhrases = expandPhrases([
+  'ON DELETE',
+  'ON UPDATE',
+  'CURRENT ROW',
+  '{ROWS | RANGE} BETWEEN',
+]);
 
 // http://spark.apache.org/docs/latest/sql-programming-guide.html
 export default class SparkFormatter extends Formatter {

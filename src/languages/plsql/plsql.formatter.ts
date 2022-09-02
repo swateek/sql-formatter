@@ -1,7 +1,7 @@
 import { expandPhrases } from 'src/expandPhrases';
 import Formatter from 'src/formatter/Formatter';
 import Tokenizer from 'src/lexer/Tokenizer';
-import { EOF_TOKEN, isReserved, isToken, type Token, TokenType } from 'src/lexer/token';
+import { EOF_TOKEN, isReserved, isToken, Token, TokenType } from 'src/lexer/token';
 import { keywords } from './plsql.keywords';
 import { functions } from './plsql.functions';
 
@@ -14,9 +14,11 @@ const reservedCommands = expandPhrases([
   'WHERE',
   'GROUP BY',
   'HAVING',
+  'PARTITION BY',
   'ORDER [SIBLINGS] BY',
   'OFFSET',
   'FETCH {FIRST | NEXT}',
+  'FOR UPDATE',
   // Data manipulation
   // - insert:
   'INSERT [INTO | ALL INTO]',
@@ -69,7 +71,12 @@ const reservedJoins = expandPhrases([
   '{CROSS | OUTER} APPLY',
 ]);
 
-const reservedPhrases = ['ON DELETE', 'ON UPDATE', 'ON COMMIT'];
+const reservedPhrases = expandPhrases([
+  'ON DELETE',
+  'ON UPDATE',
+  'ON COMMIT',
+  '{ROWS | RANGE} BETWEEN',
+]);
 
 export default class PlSqlFormatter extends Formatter {
   static operators = [
@@ -119,7 +126,7 @@ function postProcess(tokens: Token[]) {
       return { ...token, type: TokenType.RESERVED_KEYWORD };
     }
 
-    if (isReserved(token)) {
+    if (isReserved(token.type)) {
       previousReservedToken = token;
     }
 

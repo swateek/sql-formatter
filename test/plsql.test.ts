@@ -108,14 +108,6 @@ describe('PlSqlFormatter', () => {
     expect(format("Q'Stest string S'S''")).toBe("Q'Stest string S' S ''");
   });
 
-  it('formats simple SELECT with national characters', () => {
-    const result = format("SELECT N'value'");
-    expect(result).toBe(dedent`
-      SELECT
-        N'value'
-    `);
-  });
-
   it('formats Oracle recursive sub queries', () => {
     const result = format(`
       WITH t1 AS (
@@ -148,6 +140,28 @@ describe('PlSqlFormatter', () => {
         database.table@dblink
       WHERE
         id = 1;
+    `);
+  });
+
+  // regression test for #340
+  it('formats FOR UPDATE clause', () => {
+    const result = format(`
+      SELECT * FROM tbl FOR UPDATE;
+      SELECT * FROM tbl FOR UPDATE OF tbl.salary;
+    `);
+    expect(result).toBe(dedent`
+      SELECT
+        *
+      FROM
+        tbl
+      FOR UPDATE;
+
+      SELECT
+        *
+      FROM
+        tbl
+      FOR UPDATE
+        OF tbl.salary;
     `);
   });
 });

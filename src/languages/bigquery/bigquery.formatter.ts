@@ -1,6 +1,6 @@
 import Formatter from 'src/formatter/Formatter';
 import Tokenizer from 'src/lexer/Tokenizer';
-import { EOF_TOKEN, isToken, TokenType, type Token } from 'src/lexer/token';
+import { EOF_TOKEN, isToken, TokenType, Token } from 'src/lexer/token';
 import { expandPhrases } from 'src/expandPhrases';
 import { keywords } from './bigquery.keywords';
 import { functions } from './bigquery.functions';
@@ -127,14 +127,16 @@ const reservedJoins = expandPhrases([
   '{INNER | CROSS} JOIN',
 ]);
 
-const reservedPhrases = [
+const reservedPhrases = expandPhrases([
   // https://cloud.google.com/bigquery/docs/reference/standard-sql/query-syntax#tablesample_operator
   'TABLESAMPLE SYSTEM',
   // From DDL: https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language
   'ANY TYPE',
   'ALL COLUMNS',
   'NOT DETERMINISTIC',
-];
+  // inside window definitions
+  '{ROWS | RANGE} BETWEEN',
+]);
 
 // https://cloud.google.com/bigquery/docs/reference/#standard-sql-reference
 export default class BigQueryFormatter extends Formatter {

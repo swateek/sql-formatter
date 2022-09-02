@@ -1,7 +1,7 @@
 import { expandPhrases } from 'src/expandPhrases';
 import Formatter from 'src/formatter/Formatter';
 import Tokenizer from 'src/lexer/Tokenizer';
-import { EOF_TOKEN, isToken, type Token, TokenType } from 'src/lexer/token';
+import { EOF_TOKEN, isToken, Token, TokenType } from 'src/lexer/token';
 import { keywords } from './singlestoredb.keywords';
 import { functions } from './singlestoredb.functions';
 
@@ -14,6 +14,7 @@ const reservedCommands = expandPhrases([
   'WHERE',
   'GROUP BY',
   'HAVING',
+  'PARTITION BY',
   'ORDER BY',
   'LIMIT',
   'OFFSET',
@@ -222,7 +223,12 @@ const reservedJoins = expandPhrases([
   'STRAIGHT_JOIN',
 ]);
 
-const reservedPhrases = ['ON DELETE', 'ON UPDATE', 'CHARACTER SET'];
+const reservedPhrases = expandPhrases([
+  'ON DELETE',
+  'ON UPDATE',
+  'CHARACTER SET',
+  '{ROWS | RANGE} BETWEEN',
+]);
 
 export default class SingleStoreDbFormatter extends Formatter {
   static operators = ['~', ':=', '<=>', '<<', '>>', '&&', '||'];
@@ -238,14 +244,11 @@ export default class SingleStoreDbFormatter extends Formatter {
       reservedKeywords: keywords,
       reservedFunctionNames: functions,
       // TODO: support _binary"some string" prefix
-      stringTypes: [
-        { quote: "''", prefixes: ['B', 'X'] },
-        { quote: '""', prefixes: ['B', 'X'] },
-      ],
+      stringTypes: [{ quote: "''", prefixes: ['B', 'X'] }, '""'],
       identTypes: ['``'],
       identChars: { first: '$', rest: '$', allowFirstCharNumber: true },
       variableTypes: [
-        { regex: '@[A-Za-z0-9_$]+' },
+        { regex: '@@?[A-Za-z0-9_$]+' },
         { quote: '``', prefixes: ['@'], requirePrefix: true },
       ],
       lineCommentTypes: ['--', '#'],

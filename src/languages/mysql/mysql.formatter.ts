@@ -1,7 +1,7 @@
 import { expandPhrases } from 'src/expandPhrases';
 import Formatter from 'src/formatter/Formatter';
 import Tokenizer from 'src/lexer/Tokenizer';
-import { EOF_TOKEN, isToken, type Token, TokenType } from 'src/lexer/token';
+import { EOF_TOKEN, isToken, Token, TokenType } from 'src/lexer/token';
 import { keywords } from './mysql.keywords';
 import { functions } from './mysql.functions';
 
@@ -221,7 +221,12 @@ const reservedJoins = expandPhrases([
   'STRAIGHT_JOIN',
 ]);
 
-const reservedPhrases = ['ON DELETE', 'ON UPDATE', 'CHARACTER SET'];
+const reservedPhrases = expandPhrases([
+  'ON DELETE',
+  'ON UPDATE',
+  'CHARACTER SET',
+  '{ROWS | RANGE} BETWEEN',
+]);
 
 // https://dev.mysql.com/doc/refman/8.0/en/
 export default class MySqlFormatter extends Formatter {
@@ -239,14 +244,11 @@ export default class MySqlFormatter extends Formatter {
       reservedKeywords: keywords,
       reservedFunctionNames: functions,
       // TODO: support _ char set prefixes such as _utf8, _latin1, _binary, _utf8mb4, etc.
-      stringTypes: [
-        { quote: "''", prefixes: ['B', 'N', 'X'] },
-        { quote: '""', prefixes: ['B', 'N', 'X'] },
-      ],
+      stringTypes: [{ quote: "''", prefixes: ['B', 'N', 'X'] }, '""'],
       identTypes: ['``'],
       identChars: { first: '$', rest: '$', allowFirstCharNumber: true },
       variableTypes: [
-        { regex: '@[A-Za-z0-9_.$]+' },
+        { regex: '@@?[A-Za-z0-9_.$]+' },
         { quote: '""', prefixes: ['@'], requirePrefix: true },
         { quote: "''", prefixes: ['@'], requirePrefix: true },
         { quote: '``', prefixes: ['@'], requirePrefix: true },
