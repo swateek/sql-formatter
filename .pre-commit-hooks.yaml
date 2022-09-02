@@ -1,0 +1,8 @@
+- id: sql-formatter
+  name: sql-formatter
+  entry: sql-formatter
+  language: node
+  description: 'Fix linting sql files with `sql-formatter`'
+  types: [sql]
+  require_serial: true
+  additional_dependencies: []
