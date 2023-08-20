@@ -1,6 +1,6 @@
 import dedent from 'dedent-js';
 
-import { FormatFn } from 'src/sqlFormatter';
+import { FormatFn } from '../../src/sqlFormatter.js';
 
 interface TruncateTableConfig {
   withoutTable?: boolean;
@@ -13,8 +13,7 @@ export default function supportsTruncateTable(
   it('formats TRUNCATE TABLE statement', () => {
     const result = format('TRUNCATE TABLE Customers;');
     expect(result).toBe(dedent`
-      TRUNCATE TABLE
-        Customers;
+      TRUNCATE TABLE Customers;
     `);
   });
 
@@ -22,8 +21,7 @@ export default function supportsTruncateTable(
     it('formats TRUNCATE statement (without TABLE)', () => {
       const result = format('TRUNCATE Customers;');
       expect(result).toBe(dedent`
-        TRUNCATE
-          Customers;
+        TRUNCATE Customers;
       `);
     });
   }

@@ -1,9 +1,10 @@
-import { Token, TokenType } from 'src/lexer/token';
-import * as regex from 'src/lexer/regexFactory';
-import { ParamTypes, TokenizerOptions } from 'src/lexer/TokenizerOptions';
-import TokenizerEngine, { TokenRule } from 'src/lexer/TokenizerEngine';
-import { escapeRegExp } from 'src/lexer/regexUtil';
-import { equalizeWhitespace, Optional } from 'src/utils';
+import { Token, TokenType } from './token.js';
+import * as regex from './regexFactory.js';
+import { ParamTypes, TokenizerOptions } from './TokenizerOptions.js';
+import TokenizerEngine, { TokenRule } from './TokenizerEngine.js';
+import { escapeRegExp, patternToRegex } from './regexUtil.js';
+import { equalizeWhitespace, Optional } from '../utils.js';
+import { NestedComment } from './NestedComment.js';
 
 type OptionalTokenRule = Optional<TokenRule, 'regex'>;
 
@@ -32,7 +33,7 @@ export default class Tokenizer {
     return this.validRules([
       {
         type: TokenType.BLOCK_COMMENT,
-        regex: /(\/\*[^]*?(?:\*\/|$))/uy,
+        regex: cfg.nestedBlockComments ? new NestedComment() : /(\/\*[^]*?\*\/)/uy,
       },
       {
         type: TokenType.LINE_COMMENT,
@@ -48,7 +49,7 @@ export default class Tokenizer {
           /(?:0x[0-9a-fA-F]+|0b[01]+|(?:-\s*)?[0-9]+(?:\.[0-9]*)?(?:[eE][-+]?[0-9]+(?:\.[0-9]+)?)?)(?!\w)/uy,
       },
       // RESERVED_PHRASE is matched before all other keyword tokens
-      // to e.g. prioritize matching "TIMESTAMP WITH TIME ZONE" phrase over "WITH" command.
+      // to e.g. prioritize matching "TIMESTAMP WITH TIME ZONE" phrase over "WITH" clause.
       {
         type: TokenType.RESERVED_PHRASE,
         regex: regex.reservedWord(cfg.reservedPhrases ?? [], cfg.identChars),
@@ -71,12 +72,12 @@ export default class Tokenizer {
       },
       {
         type: TokenType.LIMIT,
-        regex: cfg.reservedCommands.includes('LIMIT') ? /LIMIT\b/iuy : undefined,
+        regex: cfg.reservedClauses.includes('LIMIT') ? /LIMIT\b/iuy : undefined,
         text: toCanonical,
       },
       {
-        type: TokenType.RESERVED_COMMAND,
-        regex: regex.reservedWord(cfg.reservedCommands, cfg.identChars),
+        type: TokenType.RESERVED_CLAUSE,
+        regex: regex.reservedWord(cfg.reservedClauses, cfg.identChars),
         text: toCanonical,
       },
       {
@@ -90,8 +91,18 @@ export default class Tokenizer {
         text: toCanonical,
       },
       {
-        type: TokenType.RESERVED_DEPENDENT_CLAUSE,
-        regex: regex.reservedWord(cfg.reservedDependentClauses, cfg.identChars),
+        type: TokenType.WHEN,
+        regex: /WHEN\b/iuy,
+        text: toCanonical,
+      },
+      {
+        type: TokenType.ELSE,
+        regex: /ELSE\b/iuy,
+        text: toCanonical,
+      },
+      {
+        type: TokenType.THEN,
+        regex: /THEN\b/iuy,
         text: toCanonical,
       },
       {
@@ -152,7 +163,14 @@ export default class Tokenizer {
       },
       {
         type: TokenType.OPERATOR,
-        regex: regex.operator('+-/%&|^><=.:$@#?~!', [
+        regex: regex.operator([
+          // standard operators
+          '+',
+          '-',
+          '/',
+          '>',
+          '<',
+          '=',
           '<>',
           '<=',
           '>=',
@@ -161,6 +179,7 @@ export default class Tokenizer {
         ]),
       },
       { type: TokenType.ASTERISK, regex: /[*]/uy },
+      { type: TokenType.DOT, regex: /[.]/uy },
     ]);
   }
 
@@ -177,6 +196,7 @@ export default class Tokenizer {
         typeof paramTypesOverrides?.positional === 'boolean'
           ? paramTypesOverrides.positional
           : cfg.paramTypes?.positional,
+      custom: paramTypesOverrides?.custom || cfg.paramTypes?.custom || [],
     };
 
     return this.validRules([
@@ -207,6 +227,13 @@ export default class Tokenizer {
         type: TokenType.POSITIONAL_PARAMETER,
         regex: paramTypes.positional ? /[?]/y : undefined,
       },
+      ...paramTypes.custom.map(
+        (customParam): TokenRule => ({
+          type: TokenType.CUSTOM_PARAMETER,
+          regex: patternToRegex(customParam.regex),
+          key: customParam.key ?? (v => v),
+        })
+      ),
     ]);
   }
 

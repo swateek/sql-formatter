@@ -1,14 +1,13 @@
-import { expandPhrases } from 'src/expandPhrases';
-import Formatter from 'src/formatter/Formatter';
-import Tokenizer from 'src/lexer/Tokenizer';
-import { EOF_TOKEN, isToken, Token, TokenType } from 'src/lexer/token';
-import { keywords } from './spark.keywords';
-import { functions } from './spark.functions';
+import { DialectOptions } from '../../dialect.js';
+import { expandPhrases } from '../../expandPhrases.js';
+import { EOF_TOKEN, isToken, Token, TokenType } from '../../lexer/token.js';
+import { keywords } from './spark.keywords.js';
+import { functions } from './spark.functions.js';
 
 // http://spark.apache.org/docs/latest/sql-ref-syntax.html
 const reservedSelect = expandPhrases(['SELECT [ALL | DISTINCT]']);
 
-const reservedCommands = expandPhrases([
+const reservedClauses = expandPhrases([
   // queries
   'WITH',
   'FROM',
@@ -26,8 +25,6 @@ const reservedCommands = expandPhrases([
   // - insert:
   'INSERT [INTO | OVERWRITE] [TABLE]',
   'VALUES',
-  // - truncate:
-  'TRUNCATE TABLE',
   // - insert overwrite directory:
   //   https://spark.apache.org/docs/latest/sql-ref-syntax-dml-insert-overwrite-directory.html
   'INSERT OVERWRITE [LOCAL] DIRECTORY',
@@ -38,6 +35,10 @@ const reservedCommands = expandPhrases([
   // Data definition
   'CREATE [OR REPLACE] [GLOBAL TEMPORARY | TEMPORARY] VIEW [IF NOT EXISTS]',
   'CREATE [EXTERNAL] TABLE [IF NOT EXISTS]',
+]);
+
+const onelineClauses = expandPhrases([
+  // - drop table:
   'DROP TABLE [IF EXISTS]',
   // - alter table:
   'ALTER TABLE',
@@ -46,7 +47,10 @@ const reservedCommands = expandPhrases([
   'RENAME TO',
   'RENAME COLUMN',
   'ALTER COLUMN',
-
+  // - truncate:
+  'TRUNCATE TABLE',
+  // other
+  'LATERAL VIEW',
   'ALTER DATABASE',
   'ALTER VIEW',
   'CREATE DATABASE',
@@ -87,8 +91,6 @@ const reservedCommands = expandPhrases([
   'SHOW TBLPROPERTIES',
   'SHOW VIEWS',
   'UNCACHE TABLE',
-  // other
-  'LATERAL VIEW',
 ]);
 
 const reservedSetOperations = expandPhrases([
@@ -116,32 +118,32 @@ const reservedPhrases = expandPhrases([
 ]);
 
 // http://spark.apache.org/docs/latest/sql-programming-guide.html
-export default class SparkFormatter extends Formatter {
-  static operators = ['~', '<=>', '&&', '||', '==', '->'];
-
-  tokenizer() {
-    return new Tokenizer({
-      reservedCommands,
-      reservedSelect,
-      reservedSetOperations,
-      reservedJoins,
-      reservedDependentClauses: ['WHEN', 'ELSE'],
-      reservedPhrases,
-      supportsXor: true,
-      reservedKeywords: keywords,
-      reservedFunctionNames: functions,
-      extraParens: ['[]'],
-      stringTypes: [
-        { quote: "''", prefixes: ['R', 'X'] },
-        { quote: '""', prefixes: ['R', 'X'] },
-      ],
-      identTypes: ['``'],
-      variableTypes: [{ quote: '{}', prefixes: ['$'], requirePrefix: true }],
-      operators: SparkFormatter.operators,
-      postProcess,
-    });
-  }
-}
+export const spark: DialectOptions = {
+  tokenizerOptions: {
+    reservedSelect,
+    reservedClauses: [...reservedClauses, ...onelineClauses],
+    reservedSetOperations,
+    reservedJoins,
+    reservedPhrases,
+    supportsXor: true,
+    reservedKeywords: keywords,
+    reservedFunctionNames: functions,
+    extraParens: ['[]'],
+    stringTypes: [
+      "''-bs",
+      '""-bs',
+      { quote: "''-raw", prefixes: ['R', 'X'], requirePrefix: true },
+      { quote: '""-raw', prefixes: ['R', 'X'], requirePrefix: true },
+    ],
+    identTypes: ['``'],
+    variableTypes: [{ quote: '{}', prefixes: ['$'], requirePrefix: true }],
+    operators: ['%', '~', '^', '|', '&', '<=>', '==', '!', '||', '->'],
+    postProcess,
+  },
+  formatOptions: {
+    onelineClauses,
+  },
+};
 
 function postProcess(tokens: Token[]) {
   return tokens.map((token, i) => {

@@ -1,25 +1,24 @@
 import dedent from 'dedent-js';
 
-import { format as originalFormat, FormatFn } from 'src/sqlFormatter';
-import RedshiftFormatter from 'src/languages/redshift/redshift.formatter';
-import behavesLikeSqlFormatter from './behavesLikeSqlFormatter';
+import { format as originalFormat, FormatFn } from '../src/sqlFormatter.js';
+import behavesLikeSqlFormatter from './behavesLikeSqlFormatter.js';
 
-import supportsAlterTable from './features/alterTable';
-import supportsCreateTable from './features/createTable';
-import supportsDropTable from './features/dropTable';
-import supportsJoin from './features/join';
-import supportsOperators from './features/operators';
-import supportsStrings from './features/strings';
-import supportsDeleteFrom from './features/deleteFrom';
-import supportsComments from './features/comments';
-import supportsIdentifiers from './features/identifiers';
-import supportsParams from './options/param';
-import supportsSetOperations from './features/setOperations';
-import supportsLimiting from './features/limiting';
-import supportsInsertInto from './features/insertInto';
-import supportsUpdate from './features/update';
-import supportsTruncateTable from './features/truncateTable';
-import supportsCreateView from './features/createView';
+import supportsAlterTable from './features/alterTable.js';
+import supportsCreateTable from './features/createTable.js';
+import supportsDropTable from './features/dropTable.js';
+import supportsJoin from './features/join.js';
+import supportsOperators from './features/operators.js';
+import supportsStrings from './features/strings.js';
+import supportsDeleteFrom from './features/deleteFrom.js';
+import supportsComments from './features/comments.js';
+import supportsIdentifiers from './features/identifiers.js';
+import supportsParams from './options/param.js';
+import supportsSetOperations from './features/setOperations.js';
+import supportsLimiting from './features/limiting.js';
+import supportsInsertInto from './features/insertInto.js';
+import supportsUpdate from './features/update.js';
+import supportsTruncateTable from './features/truncateTable.js';
+import supportsCreateView from './features/createView.js';
 
 describe('RedshiftFormatter', () => {
   const language = 'redshift';
@@ -40,13 +39,21 @@ describe('RedshiftFormatter', () => {
   supportsInsertInto(format);
   supportsUpdate(format);
   supportsTruncateTable(format, { withoutTable: true });
-  supportsStrings(format, ["''"]);
-  supportsIdentifiers(format, [`""`]);
-  supportsOperators(format, RedshiftFormatter.operators);
+  supportsStrings(format, ["''-qq"]);
+  supportsIdentifiers(format, [`""-qq`]);
+  // Missing: '#' and '::' operator (tested separately)
+  supportsOperators(format, ['^', '%', '@', '|/', '||/', '&', '|', '~', '<<', '>>', '||']);
   supportsJoin(format);
   supportsSetOperations(format, ['UNION', 'UNION ALL', 'EXCEPT', 'INTERSECT', 'MINUS']);
   supportsParams(format, { numbered: ['$'] });
   supportsLimiting(format, { limit: true, offset: true });
+
+  it('formats type-cast operator without spaces', () => {
+    expect(format('SELECT 2 :: numeric AS foo;')).toBe(dedent`
+      SELECT
+        2::numeric AS foo;
+    `);
+  });
 
   it('formats LIMIT', () => {
     expect(format('SELECT col1 FROM tbl ORDER BY col2 DESC LIMIT 10;')).toBe(dedent`
@@ -114,8 +121,7 @@ describe('RedshiftFormatter', () => {
         REGION AS 'us-east-1'
       `)
     ).toBe(dedent`
-      COPY
-        schema.table
+      COPY schema.table
       FROM
         's3://bucket/file.csv' IAM_ROLE 'arn:aws:iam::123456789:role/rolename' FORMAT AS CSV DELIMITER ',' QUOTE '"' REGION AS 'us-east-1'
     `);
@@ -128,19 +134,13 @@ describe('RedshiftFormatter', () => {
          ALTER TABLE t ALTER COLUMN foo ENCODE my_encoding;`
       )
     ).toBe(dedent`
-      ALTER TABLE
-        t
-      ALTER COLUMN
-        foo
-      TYPE
-        VARCHAR;
+      ALTER TABLE t
+      ALTER COLUMN foo
+      TYPE VARCHAR;
 
-      ALTER TABLE
-        t
-      ALTER COLUMN
-        foo
-      ENCODE
-        my_encoding;
+      ALTER TABLE t
+      ALTER COLUMN foo
+      ENCODE my_encoding;
     `);
   });
 });

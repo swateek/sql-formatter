@@ -1,30 +1,29 @@
 import dedent from 'dedent-js';
 
-import { format as originalFormat, FormatFn } from 'src/sqlFormatter';
-import PlSqlFormatter from 'src/languages/plsql/plsql.formatter';
-import behavesLikeSqlFormatter from './behavesLikeSqlFormatter';
+import { format as originalFormat, FormatFn } from '../src/sqlFormatter.js';
+import behavesLikeSqlFormatter from './behavesLikeSqlFormatter.js';
 
-import supportsAlterTable from './features/alterTable';
-import supportsBetween from './features/between';
-import supportsCreateTable from './features/createTable';
-import supportsDropTable from './features/dropTable';
-import supportsJoin from './features/join';
-import supportsOperators from './features/operators';
-import supportsSchema from './features/schema';
-import supportsStrings from './features/strings';
-import supportsReturning from './features/returning';
-import supportsConstraints from './features/constraints';
-import supportsDeleteFrom from './features/deleteFrom';
-import supportsComments from './features/comments';
-import supportsIdentifiers from './features/identifiers';
-import supportsParams from './options/param';
-import supportsSetOperations from './features/setOperations';
-import supportsLimiting from './features/limiting';
-import supportsInsertInto from './features/insertInto';
-import supportsUpdate from './features/update';
-import supportsTruncateTable from './features/truncateTable';
-import supportsMergeInto from './features/mergeInto';
-import supportsCreateView from './features/createView';
+import supportsAlterTable from './features/alterTable.js';
+import supportsBetween from './features/between.js';
+import supportsCreateTable from './features/createTable.js';
+import supportsDropTable from './features/dropTable.js';
+import supportsJoin from './features/join.js';
+import supportsOperators from './features/operators.js';
+import supportsSchema from './features/schema.js';
+import supportsStrings from './features/strings.js';
+import supportsReturning from './features/returning.js';
+import supportsConstraints from './features/constraints.js';
+import supportsDeleteFrom from './features/deleteFrom.js';
+import supportsComments from './features/comments.js';
+import supportsIdentifiers from './features/identifiers.js';
+import supportsParams from './options/param.js';
+import supportsSetOperations from './features/setOperations.js';
+import supportsLimiting from './features/limiting.js';
+import supportsInsertInto from './features/insertInto.js';
+import supportsUpdate from './features/update.js';
+import supportsTruncateTable from './features/truncateTable.js';
+import supportsMergeInto from './features/mergeInto.js';
+import supportsCreateView from './features/createView.js';
 
 describe('PlSqlFormatter', () => {
   const language = 'plsql';
@@ -35,7 +34,8 @@ describe('PlSqlFormatter', () => {
   supportsCreateView(format, { orReplace: true, materialized: true });
   supportsCreateTable(format);
   supportsDropTable(format);
-  supportsConstraints(format);
+  // http://dba-oracle.com/bk_on_delete_restrict_on_delete_no_action_tips.htm
+  supportsConstraints(format, ['SET NULL', 'CASCADE', 'NO ACTION']);
   supportsAlterTable(format, {
     dropColumn: true,
     modify: true,
@@ -47,11 +47,16 @@ describe('PlSqlFormatter', () => {
   supportsUpdate(format);
   supportsTruncateTable(format);
   supportsMergeInto(format);
-  supportsStrings(format, ["''", "N''"]);
-  supportsIdentifiers(format, [`""`]);
+  supportsStrings(format, ["''-qq", "N''"]);
+  supportsIdentifiers(format, [`""-qq`]);
   supportsBetween(format);
   supportsSchema(format);
-  supportsOperators(format, PlSqlFormatter.operators, ['AND', 'OR', 'XOR']);
+  supportsOperators(
+    format,
+    // Missing: '..' operator
+    ['**', ':=', '%', '~=', '^=', '>>', '<<', '=>', '||'],
+    ['AND', 'OR', 'XOR']
+  );
   supportsJoin(format, { supportsApply: true });
   supportsSetOperations(format, ['UNION', 'UNION ALL', 'EXCEPT', 'INTERSECT']);
   supportsReturning(format);
@@ -74,15 +79,9 @@ describe('PlSqlFormatter', () => {
 
   // Parameters don't allow the same characters as identifiers
   it('does not support #, $ in named parameters', () => {
-    expect(format('SELECT :col$foo')).toBe(dedent`
-      SELECT
-        :col $ foo
-    `);
+    expect(() => format('SELECT :col$foo')).toThrowError(`Parse error: Unexpected "$foo"`);
 
-    expect(format('SELECT :col#foo')).toBe(dedent`
-      SELECT
-        :col # foo
-    `);
+    expect(() => format('SELECT :col#foo')).toThrowError(`Parse error: Unexpected "#foo"`);
   });
 
   it('supports &name substitution variables', () => {
@@ -104,7 +103,7 @@ describe('PlSqlFormatter', () => {
     expect(format("nQ'{test string { } 'foo' bar }'")).toBe("nQ'{test string { } 'foo' bar }'");
     expect(format("Nq'%test string % % 'foo' bar %'")).toBe("Nq'%test string % % 'foo' bar %'");
     expect(format("Q'Xtest string X X 'foo' bar X'")).toBe("Q'Xtest string X X 'foo' bar X'");
-    expect(format("q'$test string $'$''")).toBe("q'$test string $' $ ''");
+    expect(() => format("q'$test string $'$''")).toThrowError(`Parse error: Unexpected "$''"`);
     expect(format("Q'Stest string S'S''")).toBe("Q'Stest string S' S ''");
   });
 
@@ -160,8 +159,8 @@ describe('PlSqlFormatter', () => {
         *
       FROM
         tbl
-      FOR UPDATE
-        OF tbl.salary;
+      FOR UPDATE OF
+        tbl.salary;
     `);
   });
 });

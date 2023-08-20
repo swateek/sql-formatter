@@ -1,17 +1,7 @@
 {
-  "presets": ["@babel/preset-env", "@babel/preset-typescript"],
-  "plugins": [
-    "@babel/plugin-proposal-class-properties",
-    "add-module-exports",
-    [
-      "module-resolver",
-      {
-        "root": ["./"],
-        "alias": {
-          "src": "./src"
-        }
-      }
-    ],
-    ["babel-plugin-inline-import", { "extensions": [".sql"] }]
-  ]
+  "presets": [["@babel/preset-env", { "modules": false }], "@babel/preset-typescript"],
+  "plugins": ["add-module-exports", ["babel-plugin-inline-import", { "extensions": [".sql"] }]],
+  "targets": {
+    "node": 14
+  }
 }

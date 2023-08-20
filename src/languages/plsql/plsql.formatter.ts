@@ -1,13 +1,12 @@
-import { expandPhrases } from 'src/expandPhrases';
-import Formatter from 'src/formatter/Formatter';
-import Tokenizer from 'src/lexer/Tokenizer';
-import { EOF_TOKEN, isReserved, isToken, Token, TokenType } from 'src/lexer/token';
-import { keywords } from './plsql.keywords';
-import { functions } from './plsql.functions';
+import { DialectOptions } from '../../dialect.js';
+import { expandPhrases } from '../../expandPhrases.js';
+import { EOF_TOKEN, isReserved, isToken, Token, TokenType } from '../../lexer/token.js';
+import { keywords } from './plsql.keywords.js';
+import { functions } from './plsql.functions.js';
 
 const reservedSelect = expandPhrases(['SELECT [ALL | DISTINCT | UNIQUE]']);
 
-const reservedCommands = expandPhrases([
+const reservedClauses = expandPhrases([
   // queries
   'WITH',
   'FROM',
@@ -18,18 +17,13 @@ const reservedCommands = expandPhrases([
   'ORDER [SIBLINGS] BY',
   'OFFSET',
   'FETCH {FIRST | NEXT}',
-  'FOR UPDATE',
+  'FOR UPDATE [OF]',
   // Data manipulation
   // - insert:
   'INSERT [INTO | ALL INTO]',
   'VALUES',
   // - update:
-  'UPDATE [ONLY]',
   'SET',
-  // - delete:
-  'DELETE FROM [ONLY]',
-  // - truncate:
-  'TRUNCATE TABLE',
   // - merge:
   'MERGE [INTO]',
   'WHEN [NOT] MATCHED [THEN]',
@@ -38,6 +32,16 @@ const reservedCommands = expandPhrases([
   'CREATE [OR REPLACE] [NO FORCE | FORCE] [EDITIONING | EDITIONABLE | EDITIONABLE EDITIONING | NONEDITIONABLE] VIEW',
   'CREATE MATERIALIZED VIEW',
   'CREATE [GLOBAL TEMPORARY | PRIVATE TEMPORARY | SHARDED | DUPLICATED | IMMUTABLE BLOCKCHAIN | BLOCKCHAIN | IMMUTABLE] TABLE',
+  // other
+  'RETURNING',
+]);
+
+const onelineClauses = expandPhrases([
+  // - update:
+  'UPDATE [ONLY]',
+  // - delete:
+  'DELETE FROM [ONLY]',
+  // - drop table:
   'DROP TABLE',
   // - alter table:
   'ALTER TABLE',
@@ -46,17 +50,17 @@ const reservedCommands = expandPhrases([
   'MODIFY',
   'RENAME TO',
   'RENAME COLUMN',
-
+  // - truncate:
+  'TRUNCATE TABLE',
   // other
+  'SET SCHEMA',
   'BEGIN',
   'CONNECT BY',
   'DECLARE',
   'EXCEPT',
   'EXCEPTION',
   'LOOP',
-  'RETURNING',
   'START WITH',
-  'SET SCHEMA',
 ]);
 
 const reservedSetOperations = expandPhrases(['UNION [ALL]', 'EXCEPT', 'INTERSECT']);
@@ -72,50 +76,53 @@ const reservedJoins = expandPhrases([
 ]);
 
 const reservedPhrases = expandPhrases([
-  'ON DELETE',
-  'ON UPDATE',
+  'ON {UPDATE | DELETE} [SET NULL]',
   'ON COMMIT',
   '{ROWS | RANGE} BETWEEN',
 ]);
 
-export default class PlSqlFormatter extends Formatter {
-  static operators = [
-    '||',
-    '**',
-    ':=',
-    '~=',
-    '^=',
-    '>>',
-    '<<',
-    '=>',
-    //  '..' // breaks operator test, handled by .
-  ];
-
-  tokenizer() {
-    return new Tokenizer({
-      reservedCommands,
-      reservedSelect,
-      reservedSetOperations,
-      reservedJoins,
-      reservedDependentClauses: ['WHEN', 'ELSE'],
-      reservedPhrases,
-      supportsXor: true,
-      reservedKeywords: keywords,
-      reservedFunctionNames: functions,
-      stringTypes: [
-        { quote: "''", prefixes: ['N'] },
-        { quote: "q''", prefixes: ['N'] },
-      ],
-      identTypes: [`""`],
-      identChars: { rest: '$#' },
-      variableTypes: [{ regex: '&{1,2}[A-Za-z][A-Za-z0-9_$#]*' }],
-      paramTypes: { numbered: [':'], named: [':'] },
-      paramChars: {}, // Empty object used on purpose to not allow $ and # chars as specified in identChars
-      operators: PlSqlFormatter.operators,
-      postProcess,
-    });
-  }
-}
+export const plsql: DialectOptions = {
+  tokenizerOptions: {
+    reservedSelect,
+    reservedClauses: [...reservedClauses, ...onelineClauses],
+    reservedSetOperations,
+    reservedJoins,
+    reservedPhrases,
+    supportsXor: true,
+    reservedKeywords: keywords,
+    reservedFunctionNames: functions,
+    stringTypes: [
+      { quote: "''-qq", prefixes: ['N'] },
+      { quote: "q''", prefixes: ['N'] },
+    ],
+    // PL/SQL doesn't actually support escaping of quotes in identifiers,
+    // but for the sake of simpler testing we'll support this anyway
+    // as all other SQL dialects with "identifiers" do.
+    identTypes: [`""-qq`],
+    identChars: { rest: '$#' },
+    variableTypes: [{ regex: '&{1,2}[A-Za-z][A-Za-z0-9_$#]*' }],
+    paramTypes: { numbered: [':'], named: [':'] },
+    paramChars: {}, // Empty object used on purpose to not allow $ and # chars as specified in identChars
+    operators: [
+      '**',
+      ':=',
+      '%',
+      '~=',
+      '^=',
+      // '..', // Conflicts with float followed by dot (so "2..3" gets parsed as ["2.", ".", "3"])
+      '>>',
+      '<<',
+      '=>',
+      '@',
+      '||',
+    ],
+    postProcess,
+  },
+  formatOptions: {
+    alwaysDenseOperators: ['@'],
+    onelineClauses,
+  },
+};
 
 function postProcess(tokens: Token[]) {
   let previousReservedToken: Token = EOF_TOKEN;

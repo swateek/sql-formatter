@@ -1,4 +1,4 @@
-import { last } from 'src/utils';
+import { last } from '../utils.js';
 
 const INDENT_TYPE_TOP_LEVEL = 'top-level';
 const INDENT_TYPE_BLOCK_LEVEL = 'block-level';
@@ -9,7 +9,7 @@ const INDENT_TYPE_BLOCK_LEVEL = 'block-level';
  * There are two types of indentation levels:
  *
  * - BLOCK_LEVEL : increased by open-parenthesis
- * - TOP_LEVEL : increased by RESERVED_COMMAND words
+ * - TOP_LEVEL : increased by RESERVED_CLAUSE words
  */
 export default class Indentation {
   private indentTypes: string[] = [];
@@ -24,14 +24,6 @@ export default class Indentation {
    */
   getSingleIndent(): string {
     return this.indent;
-  }
-
-  /**
-   * Returns current indentation string.
-   * @return {string} indentation string based on indentTypes
-   */
-  getIndent(): string {
-    return this.indent.repeat(this.indentTypes.length);
   }
 
   /**
@@ -77,10 +69,5 @@ export default class Indentation {
         break;
       }
     }
-  }
-
-  /** Clears all indentation */
-  resetIndentation() {
-    this.indentTypes = [];
   }
 }

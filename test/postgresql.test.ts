@@ -1,42 +1,43 @@
 import dedent from 'dedent-js';
 
-import { format as originalFormat, FormatFn } from 'src/sqlFormatter';
-import PostgreSqlFormatter from 'src/languages/postgresql/postgresql.formatter';
+import { format as originalFormat, FormatFn } from '../src/sqlFormatter.js';
 
-import behavesLikeSqlFormatter from './behavesLikeSqlFormatter';
-import supportsAlterTable from './features/alterTable';
-import supportsBetween from './features/between';
-import supportsCreateTable from './features/createTable';
-import supportsDropTable from './features/dropTable';
-import supportsJoin from './features/join';
-import supportsOperators from './features/operators';
-import supportsSchema from './features/schema';
-import supportsStrings from './features/strings';
-import supportsReturning from './features/returning';
-import supportsConstraints from './features/constraints';
-import supportsDeleteFrom from './features/deleteFrom';
-import supportsComments from './features/comments';
-import supportsIdentifiers from './features/identifiers';
-import supportsParams from './options/param';
-import supportsArrayAndMapAccessors from './features/arrayAndMapAccessors';
-import supportsWindow from './features/window';
-import supportsSetOperations from './features/setOperations';
-import supportsLimiting from './features/limiting';
-import supportsInsertInto from './features/insertInto';
-import supportsUpdate from './features/update';
-import supportsTruncateTable from './features/truncateTable';
-import supportsCreateView from './features/createView';
+import behavesLikeSqlFormatter from './behavesLikeSqlFormatter.js';
+import supportsAlterTable from './features/alterTable.js';
+import supportsBetween from './features/between.js';
+import supportsCreateTable from './features/createTable.js';
+import supportsDropTable from './features/dropTable.js';
+import supportsJoin from './features/join.js';
+import supportsOperators from './features/operators.js';
+import supportsSchema from './features/schema.js';
+import supportsStrings from './features/strings.js';
+import supportsReturning from './features/returning.js';
+import supportsConstraints from './features/constraints.js';
+import supportsDeleteFrom from './features/deleteFrom.js';
+import supportsComments from './features/comments.js';
+import supportsIdentifiers from './features/identifiers.js';
+import supportsParams from './options/param.js';
+import supportsArrayAndMapAccessors from './features/arrayAndMapAccessors.js';
+import supportsWindow from './features/window.js';
+import supportsSetOperations from './features/setOperations.js';
+import supportsLimiting from './features/limiting.js';
+import supportsInsertInto from './features/insertInto.js';
+import supportsUpdate from './features/update.js';
+import supportsTruncateTable from './features/truncateTable.js';
+import supportsCreateView from './features/createView.js';
+import supportsOnConflict from './features/onConflict.js';
+import supportsIsDistinctFrom from './features/isDistinctFrom.js';
 
 describe('PostgreSqlFormatter', () => {
   const language = 'postgresql';
   const format: FormatFn = (query, cfg = {}) => originalFormat(query, { ...cfg, language });
 
   behavesLikeSqlFormatter(format);
-  supportsComments(format);
-  supportsCreateView(format, { orReplace: true, materialized: true });
+  supportsComments(format, { nestedBlockComments: true });
+  supportsCreateView(format, { orReplace: true, materialized: true, ifNotExists: true });
   supportsCreateTable(format, { ifNotExists: true });
   supportsDropTable(format, { ifExists: true });
-  supportsConstraints(format);
+  supportsConstraints(format, ['NO ACTION', 'RESTRICT', 'CASCADE', 'SET NULL', 'SET DEFAULT']);
   supportsArrayAndMapAccessors(format);
   supportsAlterTable(format, {
     addColumn: true,
@@ -46,16 +47,99 @@ describe('PostgreSqlFormatter', () => {
   });
   supportsDeleteFrom(format);
   supportsInsertInto(format);
+  supportsOnConflict(format);
   supportsUpdate(format, { whereCurrentOf: true });
   supportsTruncateTable(format, { withoutTable: true });
-  supportsStrings(format, ["''", "U&''", "X''", "B''"]);
-  supportsIdentifiers(format, [`""`, 'U&""']);
+  supportsStrings(format, ["''-qq", "U&''", "X''", "B''"]);
+  supportsIdentifiers(format, [`""-qq`, 'U&""']);
   supportsBetween(format);
   supportsSchema(format);
-  supportsOperators(
-    format,
-    PostgreSqlFormatter.operators.filter(op => op !== '::')
-  );
+  // Missing: '::' type cast (tested separately)
+  supportsOperators(format, [
+    // Arithmetic
+    '%',
+    '^',
+    '|/',
+    '||/',
+    '@',
+    // Assignment
+    ':=',
+    // Bitwise
+    '&',
+    '|',
+    '#',
+    '~',
+    '<<',
+    '>>',
+    // Byte comparison
+    '~>~',
+    '~<~',
+    '~>=~',
+    '~<=~',
+    // Geometric
+    '@-@',
+    '@@',
+    '##',
+    '<->',
+    '&&',
+    '&<',
+    '&>',
+    '<<|',
+    '&<|',
+    '|>>',
+    '|&>',
+    '<^',
+    '^>',
+    '?#',
+    '?-',
+    '?|',
+    '?-|',
+    '?||',
+    '@>',
+    '<@',
+    '~=',
+    // JSON
+    '?',
+    '@?',
+    '?&',
+    '->',
+    '->>',
+    '#>',
+    '#>>',
+    '#-',
+    // Named function params
+    '=>',
+    // Network address
+    '>>=',
+    '<<=',
+    // Pattern matching
+    '~~',
+    '~~*',
+    '!~~',
+    '!~~*',
+    // POSIX RegExp
+    '~',
+    '~*',
+    '!~',
+    '!~*',
+    // Range/multirange
+    '-|-',
+    // String concatenation
+    '||',
+    // Text search
+    '@@@',
+    '!!',
+    // Trigram/trigraph
+    '<%',
+    '<<%',
+    '%>',
+    '%>>',
+    '<<->',
+    '<->>',
+    '<<<->',
+    '<->>>',
+  ]);
+  supportsIsDistinctFrom(format);
   supportsJoin(format);
   supportsSetOperations(format);
   supportsReturning(format);
@@ -105,6 +189,13 @@ describe('PostgreSqlFormatter', () => {
     `);
   });
 
+  it('formats type-cast operator without spaces', () => {
+    expect(format('SELECT 2 :: numeric AS foo;')).toBe(dedent`
+      SELECT
+        2::numeric AS foo;
+    `);
+  });
+
   // issue #144 (unsolved)
   // This is currently far from ideal.
   it('formats SELECT DISTINCT ON () syntax', () => {
@@ -114,6 +205,13 @@ describe('PostgreSqlFormatter', () => {
         c2
       FROM
         tbl;
+    `);
+  });
+
+  // Regression test for issue #447
+  it('formats empty SELECT', () => {
+    expect(format('SELECT;')).toBe(dedent`
+      SELECT;
     `);
   });
 
@@ -143,37 +241,47 @@ describe('PostgreSqlFormatter', () => {
          ALTER TABLE t ALTER COLUMN foo DROP NOT NULL;`
       )
     ).toBe(dedent`
-      ALTER TABLE
-        t
-      ALTER COLUMN
-        foo
-      SET DATA TYPE
-        VARCHAR;
+      ALTER TABLE t
+      ALTER COLUMN foo
+      SET DATA TYPE VARCHAR;
 
-      ALTER TABLE
-        t
-      ALTER COLUMN
-        foo
-      SET DEFAULT
-        5;
+      ALTER TABLE t
+      ALTER COLUMN foo
+      SET DEFAULT 5;
 
-      ALTER TABLE
-        t
-      ALTER COLUMN
-        foo
+      ALTER TABLE t
+      ALTER COLUMN foo
       DROP DEFAULT;
 
-      ALTER TABLE
-        t
-      ALTER COLUMN
-        foo
+      ALTER TABLE t
+      ALTER COLUMN foo
       SET NOT NULL;
 
-      ALTER TABLE
-        t
-      ALTER COLUMN
-        foo
+      ALTER TABLE t
+      ALTER COLUMN foo
       DROP NOT NULL;
+    `);
+  });
+
+  it('formats FOR UPDATE clause', () => {
+    expect(
+      format(`
+        SELECT * FROM tbl FOR UPDATE;
+        SELECT * FROM tbl FOR UPDATE OF tbl.salary;
+      `)
+    ).toBe(dedent`
+      SELECT
+        *
+      FROM
+        tbl
+      FOR UPDATE;
+
+      SELECT
+        *
+      FROM
+        tbl
+      FOR UPDATE OF
+        tbl.salary;
     `);
   });
 });

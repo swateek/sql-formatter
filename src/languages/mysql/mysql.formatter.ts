@@ -1,13 +1,12 @@
-import { expandPhrases } from 'src/expandPhrases';
-import Formatter from 'src/formatter/Formatter';
-import Tokenizer from 'src/lexer/Tokenizer';
-import { EOF_TOKEN, isToken, Token, TokenType } from 'src/lexer/token';
-import { keywords } from './mysql.keywords';
-import { functions } from './mysql.functions';
+import { DialectOptions } from '../../dialect.js';
+import { expandPhrases } from '../../expandPhrases.js';
+import { EOF_TOKEN, isToken, Token, TokenType } from '../../lexer/token.js';
+import { keywords } from './mysql.keywords.js';
+import { functions } from './mysql.functions.js';
 
 const reservedSelect = expandPhrases(['SELECT [ALL | DISTINCT | DISTINCTROW]']);
 
-const reservedCommands = expandPhrases([
+const reservedClauses = expandPhrases([
   // queries
   'WITH [RECURSIVE]',
   'FROM',
@@ -25,15 +24,18 @@ const reservedCommands = expandPhrases([
   'REPLACE [LOW_PRIORITY | DELAYED] [INTO]',
   'VALUES',
   // - update:
-  'UPDATE [LOW_PRIORITY] [IGNORE]',
   'SET',
-  // - delete:
-  'DELETE [LOW_PRIORITY] [QUICK] [IGNORE] FROM',
-  // - truncate:
-  'TRUNCATE [TABLE]',
   // Data definition
   'CREATE [OR REPLACE] [SQL SECURITY DEFINER | SQL SECURITY INVOKER] VIEW [IF NOT EXISTS]',
   'CREATE [TEMPORARY] TABLE [IF NOT EXISTS]',
+]);
+
+const onelineClauses = expandPhrases([
+  // - update:
+  'UPDATE [LOW_PRIORITY] [IGNORE]',
+  // - delete:
+  'DELETE [LOW_PRIORITY] [QUICK] [IGNORE] FROM',
+  // - drop table:
   'DROP [TEMPORARY] TABLE [IF EXISTS]',
   // - alter table:
   'ALTER TABLE',
@@ -44,7 +46,8 @@ const reservedCommands = expandPhrases([
   'RENAME COLUMN',
   'ALTER [COLUMN]',
   '{SET | DROP} DEFAULT', // for alter column
-
+  // - truncate:
+  'TRUNCATE [TABLE]',
   // https://dev.mysql.com/doc/refman/8.0/en/sql-statements.html
   'ALTER DATABASE',
   'ALTER EVENT',
@@ -84,7 +87,6 @@ const reservedCommands = expandPhrases([
   'CREATE USER',
   'DEALLOCATE PREPARE',
   'DESCRIBE',
-  'DO',
   'DROP DATABASE',
   'DROP EVENT',
   'DROP FUNCTION',
@@ -222,44 +224,45 @@ const reservedJoins = expandPhrases([
 ]);
 
 const reservedPhrases = expandPhrases([
-  'ON DELETE',
-  'ON UPDATE',
+  'ON {UPDATE | DELETE} [SET NULL]',
   'CHARACTER SET',
   '{ROWS | RANGE} BETWEEN',
 ]);
 
 // https://dev.mysql.com/doc/refman/8.0/en/
-export default class MySqlFormatter extends Formatter {
-  static operators = ['~', ':=', '<<', '>>', '<=>', '&&', '||', '->', '->>'];
-
-  tokenizer() {
-    return new Tokenizer({
-      reservedCommands,
-      reservedSelect,
-      reservedSetOperations,
-      reservedJoins,
-      reservedDependentClauses: ['WHEN', 'ELSE', 'ELSEIF'],
-      reservedPhrases,
-      supportsXor: true,
-      reservedKeywords: keywords,
-      reservedFunctionNames: functions,
-      // TODO: support _ char set prefixes such as _utf8, _latin1, _binary, _utf8mb4, etc.
-      stringTypes: [{ quote: "''", prefixes: ['B', 'N', 'X'] }, '""'],
-      identTypes: ['``'],
-      identChars: { first: '$', rest: '$', allowFirstCharNumber: true },
-      variableTypes: [
-        { regex: '@@?[A-Za-z0-9_.$]+' },
-        { quote: '""', prefixes: ['@'], requirePrefix: true },
-        { quote: "''", prefixes: ['@'], requirePrefix: true },
-        { quote: '``', prefixes: ['@'], requirePrefix: true },
-      ],
-      paramTypes: { positional: true },
-      lineCommentTypes: ['--', '#'],
-      operators: MySqlFormatter.operators,
-      postProcess,
-    });
-  }
-}
+export const mysql: DialectOptions = {
+  tokenizerOptions: {
+    reservedSelect,
+    reservedClauses: [...reservedClauses, ...onelineClauses],
+    reservedSetOperations,
+    reservedJoins,
+    reservedPhrases,
+    supportsXor: true,
+    reservedKeywords: keywords,
+    reservedFunctionNames: functions,
+    // TODO: support _ char set prefixes such as _utf8, _latin1, _binary, _utf8mb4, etc.
+    stringTypes: [
+      '""-qq-bs',
+      { quote: "''-qq-bs", prefixes: ['N'] },
+      { quote: "''-raw", prefixes: ['B', 'X'], requirePrefix: true },
+    ],
+    identTypes: ['``'],
+    identChars: { first: '$', rest: '$', allowFirstCharNumber: true },
+    variableTypes: [
+      { regex: '@@?[A-Za-z0-9_.$]+' },
+      { quote: '""-qq-bs', prefixes: ['@'], requirePrefix: true },
+      { quote: "''-qq-bs", prefixes: ['@'], requirePrefix: true },
+      { quote: '``', prefixes: ['@'], requirePrefix: true },
+    ],
+    paramTypes: { positional: true },
+    lineCommentTypes: ['--', '#'],
+    operators: ['%', ':=', '&', '|', '^', '~', '<<', '>>', '<=>', '->', '->>', '&&', '||', '!'],
+    postProcess,
+  },
+  formatOptions: {
+    onelineClauses,
+  },
+};
 
 function postProcess(tokens: Token[]) {
   return tokens.map((token, i) => {

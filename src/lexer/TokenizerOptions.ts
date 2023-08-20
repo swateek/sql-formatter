@@ -1,5 +1,5 @@
-import { quotePatterns } from 'src/lexer/regexFactory';
-import { Token } from 'src/lexer/token';
+import { quotePatterns } from './regexFactory.js';
+import { Token } from './token.js';
 
 export interface IdentChars {
   // Additional characters that can be used as first character of an identifier.
@@ -22,13 +22,13 @@ export interface PrefixedQuoteType {
   requirePrefix?: boolean; // True when prefix is required
 }
 
-export type QuoteType = PlainQuoteType | PrefixedQuoteType;
-
-export interface VariableRegex {
+export interface RegexPattern {
   regex: string;
 }
 
-export type VariableType = VariableRegex | PrefixedQuoteType;
+export type QuoteType = PlainQuoteType | PrefixedQuoteType | RegexPattern;
+
+export type VariableType = RegexPattern | PrefixedQuoteType;
 
 export interface ParamTypes {
   // True to allow for positional "?" parameter placeholders
@@ -40,17 +40,25 @@ export interface ParamTypes {
   // Prefixes for quoted parameter placeholders to support, e.g. :"name"
   // The type of quotes will depend on `identifierTypes` option.
   quoted?: (':' | '@' | '$')[];
+  // Custom parameter type definitions
+  custom?: CustomParameter[];
+}
+
+export interface CustomParameter {
+  // Regex pattern for matching the parameter
+  regex: string;
+  // Takes the matched parameter string and returns the name of the parameter
+  // For example we might match "{foo}" and the name would be "foo".
+  key?: (text: string) => string;
 }
 
 export interface TokenizerOptions {
-  // Main clauses that start new block, like: WITH, FROM, WHERE, ORDER BY
-  reservedCommands: string[];
   // SELECT clause and its variations
   reservedSelect: string[];
+  // Main clauses that start new block, like: WITH, FROM, WHERE, ORDER BY
+  reservedClauses: string[];
   // True to support XOR in addition to AND and OR
   supportsXor?: boolean;
-  // Keywords in CASE expressions that begin new line, like: WHEN, ELSE
-  reservedDependentClauses: string[];
   // Keywords that create newline but no indentaion of their body.
   // These contain set operations like UNION
   reservedSetOperations: string[];
@@ -75,6 +83,8 @@ export interface TokenizerOptions {
   paramTypes?: ParamTypes;
   // Line comment types to support, defaults to --
   lineCommentTypes?: string[];
+  // True to allow for nested /* /* block comments */ */
+  nestedBlockComments?: boolean;
   // Additional characters to support in identifiers
   identChars?: IdentChars;
   // Additional characters to support in named parameters

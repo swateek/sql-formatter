@@ -1,7 +1,6 @@
 import dedent from 'dedent-js';
 
-import { format, SqlLanguage } from 'src/sqlFormatter';
-import SqliteFormatter from 'src/languages/sqlite/sqlite.formatter';
+import { format, formatDialect, SqlLanguage, sqlite, DialectOptions } from '../src/index.js';
 
 describe('sqlFormatter', () => {
   it('throws error when unsupported language parameter specified', () => {
@@ -13,7 +12,11 @@ describe('sqlFormatter', () => {
   it('throws error when encountering unsupported characters', () => {
     expect(() => {
       format('SELECT «weird-stuff»');
-    }).toThrow('Parse error: Unexpected "«weird-stuff»"');
+    }).toThrow('Parse error: Unexpected "«weird-stu" at line 1 column 8');
+  });
+
+  it('throws error when encountering incorrect SQL grammar', () => {
+    expect(() => format('SELECT foo.+;')).toThrow('Parse error at token: + at line 1 column 12');
   });
 
   it('does nothing with empty input', () => {
@@ -52,11 +55,36 @@ describe('sqlFormatter', () => {
     }).toThrow('aliasAs config is no more supported.');
   });
 
-  it('allows passing Formatter class as a language parameter', () => {
-    expect(format('SELECT [foo], `bar`;', { language: SqliteFormatter })).toBe(dedent`
-      SELECT
-        [foo],
-        \`bar\`;
-    `);
+  describe('formatDialect()', () => {
+    it('allows passing Dialect config object as a dialect parameter', () => {
+      expect(formatDialect('SELECT [foo], `bar`;', { dialect: sqlite })).toBe(dedent`
+        SELECT
+          [foo],
+          \`bar\`;
+      `);
+    });
+
+    it('allows use of regex-based custom string type', () => {
+      // Extend SQLite dialect with additional string type
+      const sqliteWithTemplates: DialectOptions = {
+        tokenizerOptions: {
+          ...sqlite.tokenizerOptions,
+          stringTypes: [...sqlite.tokenizerOptions.stringTypes, { regex: String.raw`\{\{.*?\}\}` }],
+        },
+        formatOptions: sqlite.formatOptions,
+      };
+
+      expect(
+        formatDialect(`SELECT {{template item}}, 'normal string' FROM {{tbl}};`, {
+          dialect: sqliteWithTemplates,
+        })
+      ).toBe(dedent`
+        SELECT
+          {{template item}},
+          'normal string'
+        FROM
+          {{tbl}};
+      `);
+    });
   });
 });

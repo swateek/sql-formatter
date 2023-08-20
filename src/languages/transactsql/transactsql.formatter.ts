@@ -1,14 +1,14 @@
-import { expandPhrases } from 'src/expandPhrases';
-import Formatter from 'src/formatter/Formatter';
-import Tokenizer from 'src/lexer/Tokenizer';
-import { functions } from './tsql.functions';
-import { keywords } from './tsql.keywords';
+import { DialectOptions } from '../../dialect.js';
+import { expandPhrases } from '../../expandPhrases.js';
+import { functions } from './transactsql.functions.js';
+import { keywords } from './transactsql.keywords.js';
 
 const reservedSelect = expandPhrases(['SELECT [ALL | DISTINCT]']);
 
-const reservedCommands = expandPhrases([
+const reservedClauses = expandPhrases([
   // queries
   'WITH',
+  'INTO',
   'FROM',
   'WHERE',
   'GROUP BY',
@@ -23,13 +23,7 @@ const reservedCommands = expandPhrases([
   'INSERT [INTO]',
   'VALUES',
   // - update:
-  'UPDATE',
   'SET',
-  'WHERE CURRENT OF',
-  // - delete:
-  'DELETE [FROM]',
-  // - truncate:
-  'TRUNCATE TABLE',
   // - merge:
   'MERGE [INTO]',
   'WHEN [NOT] MATCHED [BY TARGET | BY SOURCE] [THEN]',
@@ -37,13 +31,24 @@ const reservedCommands = expandPhrases([
   // Data definition
   'CREATE [OR ALTER] [MATERIALIZED] VIEW',
   'CREATE TABLE',
+  'CREATE [OR ALTER] {PROC | PROCEDURE}',
+]);
+
+const onelineClauses = expandPhrases([
+  // - update:
+  'UPDATE',
+  'WHERE CURRENT OF',
+  // - delete:
+  'DELETE [FROM]',
+  // - drop table:
   'DROP TABLE [IF EXISTS]',
   // - alter table:
   'ALTER TABLE',
   'ADD',
   'DROP COLUMN [IF EXISTS]',
   'ALTER COLUMN',
-
+  // - truncate:
+  'TRUNCATE TABLE',
   // https://docs.microsoft.com/en-us/sql/t-sql/statements/statements?view=sql-server-ver15
   'ADD SENSITIVITY CLASSIFICATION',
   'ADD SIGNATURE',
@@ -210,28 +215,48 @@ const reservedJoins = expandPhrases([
   '{CROSS | OUTER} APPLY',
 ]);
 
-const reservedPhrases = expandPhrases(['ON DELETE', 'ON UPDATE', '{ROWS | RANGE} BETWEEN']);
+const reservedPhrases = expandPhrases([
+  'ON {UPDATE | DELETE} [SET NULL | SET DEFAULT]',
+  '{ROWS | RANGE} BETWEEN',
+]);
 
 // https://docs.microsoft.com/en-us/sql/t-sql/language-reference?view=sql-server-ver15
-export default class TSqlFormatter extends Formatter {
-  static operators = ['~', '!<', '!>', '+=', '-=', '*=', '/=', '%=', '|=', '&=', '^=', '::'];
-
-  tokenizer() {
-    return new Tokenizer({
-      reservedCommands,
-      reservedSelect,
-      reservedSetOperations,
-      reservedJoins,
-      reservedDependentClauses: ['WHEN', 'ELSE'],
-      reservedPhrases,
-      reservedKeywords: keywords,
-      reservedFunctionNames: functions,
-      stringTypes: [{ quote: "''", prefixes: ['N'] }],
-      identTypes: [`""`, '[]'],
-      identChars: { first: '#@', rest: '#@$' },
-      paramTypes: { named: ['@'], quoted: ['@'] },
-      operators: TSqlFormatter.operators,
-      // TODO: Support for money constants
-    });
-  }
-}
+export const transactsql: DialectOptions = {
+  tokenizerOptions: {
+    reservedSelect,
+    reservedClauses: [...reservedClauses, ...onelineClauses],
+    reservedSetOperations,
+    reservedJoins,
+    reservedPhrases,
+    reservedKeywords: keywords,
+    reservedFunctionNames: functions,
+    nestedBlockComments: true,
+    stringTypes: [{ quote: "''-qq", prefixes: ['N'] }],
+    identTypes: [`""-qq`, '[]'],
+    identChars: { first: '#@', rest: '#@$' },
+    paramTypes: { named: ['@'], quoted: ['@'] },
+    operators: [
+      '%',
+      '&',
+      '|',
+      '^',
+      '~',
+      '!<',
+      '!>',
+      '+=',
+      '-=',
+      '*=',
+      '/=',
+      '%=',
+      '|=',
+      '&=',
+      '^=',
+      '::',
+    ],
+    // TODO: Support for money constants
+  },
+  formatOptions: {
+    alwaysDenseOperators: ['::'],
+    onelineClauses,
+  },
+};

@@ -1,22 +1,22 @@
 import dedent from 'dedent-js';
 
-import { FormatFn } from 'src/sqlFormatter';
+import { FormatFn } from '../src/sqlFormatter.js';
 
-import supportsCase from './features/case';
-import supportsNumbers from './features/numbers';
-import supportsWith from './features/with';
-import supportsTabWidth from './options/tabWidth';
-import supportsUseTabs from './options/useTabs';
-import supportsExpressionWidth from './options/expressionWidth';
-import supportsKeywordCase from './options/keywordCase';
-import supportsIndentStyle from './options/indentStyle';
-import supportsCommaPosition from './options/commaPosition';
-import supportsLinesBetweenQueries from './options/linesBetweenQueries';
-import supportsNewlineBeforeSemicolon from './options/newlineBeforeSemicolon';
-import supportsLogicalOperatorNewline from './options/logicalOperatorNewline';
-import supportsTabulateAlias from './options/tabulateAlias';
-import supportsParamTypes from './options/paramTypes';
-import supportsWindowFunctions from './features/windowFunctions';
+import supportsCase from './features/case.js';
+import supportsNumbers from './features/numbers.js';
+import supportsWith from './features/with.js';
+import supportsTabWidth from './options/tabWidth.js';
+import supportsUseTabs from './options/useTabs.js';
+import supportsExpressionWidth from './options/expressionWidth.js';
+import supportsKeywordCase from './options/keywordCase.js';
+import supportsIndentStyle from './options/indentStyle.js';
+import supportsCommaPosition from './options/commaPosition.js';
+import supportsLinesBetweenQueries from './options/linesBetweenQueries.js';
+import supportsNewlineBeforeSemicolon from './options/newlineBeforeSemicolon.js';
+import supportsLogicalOperatorNewline from './options/logicalOperatorNewline.js';
+import supportsTabulateAlias from './options/tabulateAlias.js';
+import supportsParamTypes from './options/paramTypes.js';
+import supportsWindowFunctions from './features/windowFunctions.js';
 
 /**
  * Core tests for all SQL formatters
@@ -39,14 +39,15 @@ export default function behavesLikeSqlFormatter(format: FormatFn) {
   supportsParamTypes(format);
   supportsWindowFunctions(format);
 
-  it('formats simple SELECT query', () => {
-    const result = format('SELECT count(*),Column1 FROM Table1;');
+  it('formats SELECT with asterisks', () => {
+    const result = format('SELECT tbl.*, count(*), col1 * col2 FROM tbl;');
     expect(result).toBe(dedent`
       SELECT
+        tbl.*,
         count(*),
-        Column1
+        col1 * col2
       FROM
-        Table1;
+        tbl;
     `);
   });
 

@@ -1,10 +1,11 @@
-const merge = require('webpack-merge').merge;
-const common = require('./webpack.common.js');
+import { merge } from 'webpack-merge';
 
-module.exports = merge(common, {
+import common from './webpack.common.js';
+
+export default merge(common, {
   mode: 'production',
   devtool: 'source-map',
   output: {
-    filename: 'sql-formatter.min.js',
+    filename: 'sql-formatter.min.cjs',
   },
 });

@@ -1,13 +1,12 @@
-import { expandPhrases } from 'src/expandPhrases';
-import Formatter from 'src/formatter/Formatter';
-import Tokenizer from 'src/lexer/Tokenizer';
-import { EOF_TOKEN, isToken, Token, TokenType } from 'src/lexer/token';
-import { keywords } from './singlestoredb.keywords';
-import { functions } from './singlestoredb.functions';
+import { DialectOptions } from '../../dialect.js';
+import { expandPhrases } from '../../expandPhrases.js';
+import { EOF_TOKEN, isToken, Token, TokenType } from '../../lexer/token.js';
+import { keywords } from './singlestoredb.keywords.js';
+import { functions } from './singlestoredb.functions.js';
 
 const reservedSelect = expandPhrases(['SELECT [ALL | DISTINCT | DISTINCTROW]']);
 
-const reservedCommands = expandPhrases([
+const reservedClauses = expandPhrases([
   // queries
   'WITH',
   'FROM',
@@ -24,17 +23,20 @@ const reservedCommands = expandPhrases([
   'VALUES',
   'REPLACE [INTO]',
   // - update:
-  'UPDATE',
   'SET',
-  // - delete:
-  'DELETE [FROM]',
-  // - truncate:
-  'TRUNCATE [TABLE]',
   // Data definition
   'CREATE VIEW',
   'CREATE [ROWSTORE] [REFERENCE | TEMPORARY | GLOBAL TEMPORARY] TABLE [IF NOT EXISTS]',
   'CREATE [OR REPLACE] [TEMPORARY] PROCEDURE [IF NOT EXISTS]',
   'CREATE [OR REPLACE] [EXTERNAL] FUNCTION',
+]);
+
+const onelineClauses = expandPhrases([
+  // - update:
+  'UPDATE',
+  // - delete:
+  'DELETE [FROM]',
+  // - drop table:
   'DROP [TEMPORARY] TABLE [IF EXISTS]',
   // - alter table:
   'ALTER [ONLINE] TABLE',
@@ -44,7 +46,8 @@ const reservedCommands = expandPhrases([
   'MODIFY [COLUMN]',
   'CHANGE',
   'RENAME [TO | AS]',
-
+  // - truncate:
+  'TRUNCATE [TABLE]',
   // https://docs.singlestore.com/managed-service/en/reference/sql-reference.html
   'ADD AGGREGATOR',
   'ADD LEAF',
@@ -86,7 +89,6 @@ const reservedCommands = expandPhrases([
   'DESCRIBE',
   'DETACH DATABASE',
   'DETACH PIPELINE',
-  'DO',
   'DROP DATABASE',
   'DROP FUNCTION',
   'DROP INDEX',
@@ -193,7 +195,6 @@ const reservedCommands = expandPhrases([
   'STOP REPLICATING',
   'STOP SLAVE',
   'TEST PIPELINE',
-  'TRUNCATE TABLE',
   'UNLOCK INSTANCE',
   'UNLOCK TABLES',
   'USE',
@@ -230,33 +231,52 @@ const reservedPhrases = expandPhrases([
   '{ROWS | RANGE} BETWEEN',
 ]);
 
-export default class SingleStoreDbFormatter extends Formatter {
-  static operators = ['~', ':=', '<=>', '<<', '>>', '&&', '||'];
-
-  tokenizer() {
-    return new Tokenizer({
-      reservedCommands,
-      reservedSelect,
-      reservedSetOperations,
-      reservedJoins,
-      reservedDependentClauses: ['WHEN', 'ELSE', 'ELSEIF'],
-      reservedPhrases,
-      reservedKeywords: keywords,
-      reservedFunctionNames: functions,
-      // TODO: support _binary"some string" prefix
-      stringTypes: [{ quote: "''", prefixes: ['B', 'X'] }, '""'],
-      identTypes: ['``'],
-      identChars: { first: '$', rest: '$', allowFirstCharNumber: true },
-      variableTypes: [
-        { regex: '@@?[A-Za-z0-9_$]+' },
-        { quote: '``', prefixes: ['@'], requirePrefix: true },
-      ],
-      lineCommentTypes: ['--', '#'],
-      operators: SingleStoreDbFormatter.operators,
-      postProcess,
-    });
-  }
-}
+export const singlestoredb: DialectOptions = {
+  tokenizerOptions: {
+    reservedSelect,
+    reservedClauses: [...reservedClauses, ...onelineClauses],
+    reservedSetOperations,
+    reservedJoins,
+    reservedPhrases,
+    reservedKeywords: keywords,
+    reservedFunctionNames: functions,
+    // TODO: support _binary"some string" prefix
+    stringTypes: [
+      '""-qq-bs',
+      "''-qq-bs",
+      { quote: "''-raw", prefixes: ['B', 'X'], requirePrefix: true },
+    ],
+    identTypes: ['``'],
+    identChars: { first: '$', rest: '$', allowFirstCharNumber: true },
+    variableTypes: [
+      { regex: '@@?[A-Za-z0-9_$]+' },
+      { quote: '``', prefixes: ['@'], requirePrefix: true },
+    ],
+    lineCommentTypes: ['--', '#'],
+    operators: [
+      ':=',
+      '&',
+      '|',
+      '^',
+      '~',
+      '<<',
+      '>>',
+      '<=>',
+      '&&',
+      '||',
+      '::',
+      '::$',
+      '::%',
+      ':>',
+      '!:>',
+    ],
+    postProcess,
+  },
+  formatOptions: {
+    alwaysDenseOperators: ['::', '::$', '::%'],
+    onelineClauses,
+  },
+};
 
 function postProcess(tokens: Token[]) {
   return tokens.map((token, i) => {

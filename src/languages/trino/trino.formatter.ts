@@ -1,13 +1,12 @@
-import { expandPhrases } from 'src/expandPhrases';
-import Formatter from 'src/formatter/Formatter';
-import Tokenizer from 'src/lexer/Tokenizer';
-import { functions } from './trino.functions';
-import { keywords } from './trino.keywords';
+import { DialectOptions } from '../../dialect.js';
+import { expandPhrases } from '../../expandPhrases.js';
+import { functions } from './trino.functions.js';
+import { keywords } from './trino.keywords.js';
 
 const reservedSelect = expandPhrases(['SELECT [ALL | DISTINCT]']);
 
 // https://github.com/trinodb/trino/blob/432d2897bdef99388c1a47188743a061c4ac1f34/core/trino-parser/src/main/antlr4/io/trino/sql/parser/SqlBase.g4#L41
-const reservedCommands = expandPhrases([
+const reservedClauses = expandPhrases([
   // queries
   'WITH [RECURSIVE]',
   'FROM',
@@ -25,15 +24,27 @@ const reservedCommands = expandPhrases([
   'INSERT INTO',
   'VALUES',
   // - update:
-  'UPDATE',
   'SET',
-  // - delete:
-  'DELETE FROM',
-  // - truncate:
-  'TRUNCATE TABLE',
   // Data definition
   'CREATE [OR REPLACE] [MATERIALIZED] VIEW',
   'CREATE TABLE [IF NOT EXISTS]',
+  // MATCH_RECOGNIZE
+  'MATCH_RECOGNIZE',
+  'MEASURES',
+  'ONE ROW PER MATCH',
+  'ALL ROWS PER MATCH',
+  'AFTER MATCH',
+  'PATTERN',
+  'SUBSET',
+  'DEFINE',
+]);
+
+const onelineClauses = expandPhrases([
+  // - update:
+  'UPDATE',
+  // - delete:
+  'DELETE FROM',
+  // - drop table:
   'DROP TABLE [IF EXISTS]',
   // - alter table:
   'ALTER TABLE [IF EXISTS]',
@@ -44,14 +55,16 @@ const reservedCommands = expandPhrases([
   'SET AUTHORIZATION [USER | ROLE]',
   'SET PROPERTIES',
   'EXECUTE',
+  // - truncate:
+  'TRUNCATE TABLE',
 
+  // other
   'ALTER SCHEMA',
   'ALTER MATERIALIZED VIEW',
   'ALTER VIEW',
   'CREATE SCHEMA',
   'CREATE ROLE',
   'DROP SCHEMA',
-  'DROP COLUMN',
   'DROP MATERIALIZED VIEW',
   'DROP VIEW',
   'DROP ROLE',
@@ -88,16 +101,6 @@ const reservedCommands = expandPhrases([
   'SHOW ROLE GRANTS',
   'SHOW FUNCTIONS',
   'SHOW SESSION',
-
-  // MATCH_RECOGNIZE
-  'MATCH_RECOGNIZE',
-  'MEASURES',
-  'ONE ROW PER MATCH',
-  'ALL ROWS PER MATCH',
-  'AFTER MATCH',
-  'PATTERN',
-  'SUBSET',
-  'DEFINE',
 ]);
 
 // https://github.com/trinodb/trino/blob/432d2897bdef99388c1a47188743a061c4ac1f34/core/trino-parser/src/main/antlr4/io/trino/sql/parser/SqlBase.g4#L231-L235
@@ -117,35 +120,49 @@ const reservedJoins = expandPhrases([
   'NATURAL {LEFT | RIGHT | FULL} [OUTER] JOIN',
 ]);
 
-const reservedPhrases = expandPhrases(['{ROWS | RANGE | GROUPS} BETWEEN']);
+const reservedPhrases = expandPhrases([
+  '{ROWS | RANGE | GROUPS} BETWEEN',
+  // comparison operator
+  'IS [NOT] DISTINCT FROM',
+]);
 
-export default class TrinoFormatter extends Formatter {
-  // https://trino.io/docs/current/functions/list.html#id1
-  // https://trino.io/docs/current/sql/match-recognize.html#row-pattern-syntax
-  static operators = ['||', '->'];
-
-  tokenizer() {
-    return new Tokenizer({
-      reservedCommands,
-      reservedSelect,
-      reservedSetOperations,
-      reservedJoins,
-      reservedDependentClauses: ['WHEN', 'ELSE'],
-      reservedPhrases,
-      reservedKeywords: keywords,
-      reservedFunctionNames: functions,
-      // Trino also supports {- ... -} parenthesis.
-      // The formatting of these currently works out as a result of { and -
-      // not getting a space added in-between.
-      // https://trino.io/docs/current/sql/match-recognize.html#row-pattern-syntax
-      extraParens: ['[]', '{}'],
-      // https://trino.io/docs/current/language/types.html#string
-      // https://trino.io/docs/current/language/types.html#varbinary
-      stringTypes: [{ quote: "''", prefixes: ['X', 'U&'] }],
-      // https://trino.io/docs/current/language/reserved.html
-      identTypes: ['""'],
-      paramTypes: { positional: true },
-      operators: TrinoFormatter.operators,
-    });
-  }
-}
+export const trino: DialectOptions = {
+  tokenizerOptions: {
+    reservedSelect,
+    reservedClauses: [...reservedClauses, ...onelineClauses],
+    reservedSetOperations,
+    reservedJoins,
+    reservedPhrases,
+    reservedKeywords: keywords,
+    reservedFunctionNames: functions,
+    // Trino also supports {- ... -} parenthesis.
+    // The formatting of these currently works out as a result of { and -
+    // not getting a space added in-between.
+    // https://trino.io/docs/current/sql/match-recognize.html#row-pattern-syntax
+    extraParens: ['[]', '{}'],
+    // https://trino.io/docs/current/language/types.html#string
+    // https://trino.io/docs/current/language/types.html#varbinary
+    stringTypes: [
+      { quote: "''-qq", prefixes: ['U&'] },
+      { quote: "''-raw", prefixes: ['X'], requirePrefix: true },
+    ],
+    // https://trino.io/docs/current/language/reserved.html
+    identTypes: ['""-qq'],
+    paramTypes: { positional: true },
+    operators: [
+      '%',
+      '->',
+      '=>',
+      ':',
+      '||',
+      // Row pattern syntax
+      '|',
+      '^',
+      '$',
+      // '?', conflicts with positional placeholders
+    ],
+  },
+  formatOptions: {
+    onelineClauses,
+  },
+};

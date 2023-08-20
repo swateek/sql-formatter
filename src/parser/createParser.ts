@@ -1,12 +1,14 @@
-import { Parser as NearleyParser, Grammar } from 'nearley';
+import nearley from 'nearley';
 
-import Tokenizer from 'src/lexer/Tokenizer';
-import { disambiguateTokens } from 'src/lexer/disambiguateTokens';
-import { ParamTypes } from 'src/lexer/TokenizerOptions';
-import { StatementNode } from 'src/parser/ast';
-import grammar from 'src/parser/grammar';
-import LexerAdapter from 'src/parser/LexerAdapter';
-import { EOF_TOKEN } from 'src/lexer/token';
+import Tokenizer from '../lexer/Tokenizer.js';
+import { disambiguateTokens } from '../lexer/disambiguateTokens.js';
+import { ParamTypes } from '../lexer/TokenizerOptions.js';
+import { StatementNode } from './ast.js';
+import grammar from './grammar.js';
+import LexerAdapter from './LexerAdapter.js';
+import { createEofToken } from '../lexer/token.js';
+
+const { Parser: NearleyParser, Grammar } = nearley;
 
 export interface Parser {
   parse(sql: string, paramTypesOverrides: ParamTypes): StatementNode[];
@@ -19,7 +21,7 @@ export function createParser(tokenizer: Tokenizer): Parser {
   let paramTypesOverrides: ParamTypes = {};
   const lexer = new LexerAdapter(chunk => [
     ...disambiguateTokens(tokenizer.tokenize(chunk, paramTypesOverrides)),
-    EOF_TOKEN,
+    createEofToken(chunk.length),
   ]);
   const parser = new NearleyParser(Grammar.fromCompiled(grammar), { lexer });
 
@@ -37,7 +39,7 @@ export function createParser(tokenizer: Tokenizer): Parser {
         // but I haven't found a way to get this info from Nearley :(
         throw new Error('Parse error: Invalid SQL');
       } else {
-        throw new Error('Parse error: Ambiguous grammar');
+        throw new Error(`Parse error: Ambiguous grammar\n${JSON.stringify(results, undefined, 2)}`);
       }
     },
   };

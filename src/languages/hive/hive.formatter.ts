@@ -1,12 +1,11 @@
-import { expandPhrases } from 'src/expandPhrases';
-import Formatter from 'src/formatter/Formatter';
-import Tokenizer from 'src/lexer/Tokenizer';
-import { functions } from './hive.functions';
-import { keywords } from './hive.keywords';
+import { DialectOptions } from '../../dialect.js';
+import { expandPhrases } from '../../expandPhrases.js';
+import { functions } from './hive.functions.js';
+import { keywords } from './hive.keywords.js';
 
 const reservedSelect = expandPhrases(['SELECT [ALL | DISTINCT]']);
 
-const reservedCommands = expandPhrases([
+const reservedClauses = expandPhrases([
   // queries
   'WITH',
   'FROM',
@@ -27,12 +26,7 @@ const reservedCommands = expandPhrases([
   'INSERT INTO [TABLE]',
   'VALUES',
   // - update:
-  'UPDATE',
   'SET',
-  // - delete:
-  'DELETE FROM',
-  // - truncate:
-  'TRUNCATE [TABLE]',
   // - merge:
   'MERGE INTO',
   'WHEN [NOT] MATCHED [THEN]',
@@ -48,11 +42,20 @@ const reservedCommands = expandPhrases([
   // Data definition
   'CREATE [MATERIALIZED] VIEW [IF NOT EXISTS]',
   'CREATE [TEMPORARY] [EXTERNAL] TABLE [IF NOT EXISTS]',
+]);
+
+const onelineClauses = expandPhrases([
+  // - update:
+  'UPDATE',
+  // - delete:
+  'DELETE FROM',
+  // - drop table:
   'DROP TABLE [IF EXISTS]',
   // - alter table:
   'ALTER TABLE',
   'RENAME TO',
-
+  // - truncate:
+  'TRUNCATE [TABLE]',
   // other
   'ALTER',
   'CREATE',
@@ -60,9 +63,7 @@ const reservedCommands = expandPhrases([
   'DESCRIBE',
   'DROP',
   'FETCH',
-  'SET SCHEMA', // added
   'SHOW',
-  // newline keywords
   'STORED AS',
   'STORED BY',
   'ROW FORMAT',
@@ -81,24 +82,22 @@ const reservedJoins = expandPhrases([
 const reservedPhrases = expandPhrases(['{ROWS | RANGE} BETWEEN']);
 
 // https://cwiki.apache.org/confluence/display/Hive/LanguageManual
-export default class HiveFormatter extends Formatter {
-  static operators = ['<=>', '==', '||'];
-
-  tokenizer() {
-    return new Tokenizer({
-      reservedCommands,
-      reservedSelect,
-      reservedSetOperations,
-      reservedJoins,
-      reservedDependentClauses: ['WHEN', 'ELSE'],
-      reservedPhrases,
-      reservedKeywords: keywords,
-      reservedFunctionNames: functions,
-      extraParens: ['[]'],
-      stringTypes: ['""', "''"],
-      identTypes: ['``'],
-      variableTypes: [{ quote: '{}', prefixes: ['$'], requirePrefix: true }],
-      operators: HiveFormatter.operators,
-    });
-  }
-}
+export const hive: DialectOptions = {
+  tokenizerOptions: {
+    reservedSelect,
+    reservedClauses: [...reservedClauses, ...onelineClauses],
+    reservedSetOperations,
+    reservedJoins,
+    reservedPhrases,
+    reservedKeywords: keywords,
+    reservedFunctionNames: functions,
+    extraParens: ['[]'],
+    stringTypes: ['""-bs', "''-bs"],
+    identTypes: ['``'],
+    variableTypes: [{ quote: '{}', prefixes: ['$'], requirePrefix: true }],
+    operators: ['%', '~', '^', '|', '&', '<=>', '==', '!', '||'],
+  },
+  formatOptions: {
+    onelineClauses,
+  },
+};

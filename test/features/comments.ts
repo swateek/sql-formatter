@@ -1,9 +1,11 @@
 import dedent from 'dedent-js';
 
-import { FormatFn } from 'src/sqlFormatter';
+import { FormatFn } from '../../src/sqlFormatter.js';
 
 interface CommentsConfig {
   hashComments?: boolean;
+  doubleSlashComments?: boolean;
+  nestedBlockComments?: boolean;
 }
 
 export default function supportsComments(format: FormatFn, opts: CommentsConfig = {}) {
@@ -43,6 +45,18 @@ export default function supportsComments(format: FormatFn, opts: CommentsConfig 
         MyTable
       WHERE
         1 = 2;
+    `;
+    expect(format(sql)).toBe(sql);
+  });
+
+  it('keeps block comment on separate line when it is separate in original SQL', () => {
+    const sql = dedent`
+      SELECT
+        /* separate-line block comment */
+        foo,
+        bar /* inline block comment */
+      FROM
+        tbl;
     `;
     expect(format(sql)).toBe(sql);
   });
@@ -102,6 +116,20 @@ export default function supportsComments(format: FormatFn, opts: CommentsConfig 
     `);
   });
 
+  // Regression test for #481
+  it('formats first line comment in a file', () => {
+    expect(format('-- comment1\n-- comment2\n')).toBe(dedent`
+      -- comment1
+      -- comment2
+    `);
+  });
+  it('formats first block comment in a file', () => {
+    expect(format('/*comment1*/\n/*comment2*/\n')).toBe(dedent`
+      /*comment1*/
+      /*comment2*/
+    `);
+  });
+
   it('preserves single-line comments at the end of lines', () => {
     expect(
       format(`
@@ -149,15 +177,65 @@ export default function supportsComments(format: FormatFn, opts: CommentsConfig 
     expect(result).toBe('SELECT\n  *\nFROM\n  -- line comment 1\n  MyTable -- line comment 2');
   });
 
-  it('formats query that ends with open comment', () => {
+  it('does not detect unclosed comment as a comment', () => {
     const result = format(`
       SELECT count(*)
-      /*Comment
+      /*SomeComment
     `);
     expect(result).toBe(dedent`
       SELECT
-        count(*)
-        /*Comment
+        count(*) / * SomeComment
+    `);
+  });
+
+  it('formats comments between function name and parenthesis', () => {
+    const result = format(`
+      SELECT count /* comment */ (*);
+    `);
+    expect(result).toBe(dedent`
+      SELECT
+        count/* comment */ (*);
+    `);
+  });
+
+  it('formats comments between qualified.names (before dot)', () => {
+    const result = format(`
+      SELECT foo/* com1 */.bar, count()/* com2 */.bar, foo.bar/* com3 */.baz, (1, 2) /* com4 */.foo;
+    `);
+    expect(result).toBe(dedent`
+      SELECT
+        foo /* com1 */.bar,
+        count() /* com2 */.bar,
+        foo.bar /* com3 */.baz,
+        (1, 2) /* com4 */.foo;
+    `);
+  });
+
+  // Regression test for #558
+  it('indents multiline block comment that is not a doc-comment', () => {
+    const result = format(dedent`
+      SELECT 1
+      /*
+      comment line
+      */
+    `);
+    expect(result).toBe(dedent`
+      SELECT
+        1
+        /*
+        comment line
+        */
+    `);
+  });
+
+  it('formats comments between qualified.names (after dot)', () => {
+    const result = format(`
+      SELECT foo. /* com1 */ bar, foo. /* com2 */ *;
+    `);
+    expect(result).toBe(dedent`
+      SELECT
+        foo./* com1 */ bar,
+        foo./* com2 */ *;
     `);
   });
 
@@ -167,6 +245,30 @@ export default function supportsComments(format: FormatFn, opts: CommentsConfig 
       expect(result).toBe(dedent`
         SELECT
           alpha # commment
+        FROM
+          beta
+      `);
+    });
+  }
+
+  if (opts.doubleSlashComments) {
+    it('supports // line comment', () => {
+      const result = format('SELECT alpha // commment\nFROM beta');
+      expect(result).toBe(dedent`
+        SELECT
+          alpha // commment
+        FROM
+          beta
+      `);
+    });
+  }
+
+  if (opts.nestedBlockComments) {
+    it('supports nested block comments', () => {
+      const result = format('SELECT alpha /* /* commment */ */ FROM beta');
+      expect(result).toBe(dedent`
+        SELECT
+          alpha /* /* commment */ */
         FROM
           beta
       `);

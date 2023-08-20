@@ -1,7 +1,7 @@
 import { expect } from '@jest/globals';
 import dedent from 'dedent-js';
 
-import { FormatFn } from 'src/sqlFormatter';
+import { FormatFn } from '../../src/sqlFormatter.js';
 
 export default function supportsCommaPosition(format: FormatFn) {
   it('defaults to comma after column', () => {
@@ -9,7 +9,7 @@ export default function supportsCommaPosition(format: FormatFn) {
       'SELECT alpha , MAX(beta) , delta AS d ,epsilon FROM gamma GROUP BY alpha , delta, epsilon'
     );
     expect(result).toBe(
-      dedent(`
+      dedent`
         SELECT
           alpha,
           MAX(beta),
@@ -21,7 +21,7 @@ export default function supportsCommaPosition(format: FormatFn) {
           alpha,
           delta,
           epsilon
-      `)
+      `
     );
   });
 
@@ -32,7 +32,7 @@ export default function supportsCommaPosition(format: FormatFn) {
         { commaPosition: 'before' }
       );
       expect(result).toBe(
-        dedent(`
+        dedent`
           SELECT
             alpha
           , MAX(beta)
@@ -44,7 +44,25 @@ export default function supportsCommaPosition(format: FormatFn) {
             alpha
           , delta
           , epsilon
-        `)
+        `
+      );
+    });
+
+    it('handles comments after commas', () => {
+      const result = format(
+        `SELECT alpha, --comment1
+        MAX(beta), --comment2
+        delta AS d, epsilon --comment3`,
+        { commaPosition: 'before' }
+      );
+      expect(result).toBe(
+        dedent`
+          SELECT
+            alpha --comment1
+          , MAX(beta) --comment2
+          , delta AS d
+          , epsilon --comment3
+        `
       );
     });
 
@@ -54,7 +72,7 @@ export default function supportsCommaPosition(format: FormatFn) {
         { commaPosition: 'before', tabWidth: 4 }
       );
       expect(result).toBe(
-        dedent(`
+        dedent`
           SELECT
               alpha
             , MAX(beta)
@@ -66,7 +84,7 @@ export default function supportsCommaPosition(format: FormatFn) {
               alpha
             , delta
             , epsilon
-        `)
+        `
       );
     });
 
@@ -90,7 +108,7 @@ export default function supportsCommaPosition(format: FormatFn) {
         { commaPosition: 'tabular' }
       );
       expect(result).toBe(
-        dedent(`
+        dedent`
           SELECT
             alpha     ,
             MAX(beta) ,
@@ -102,7 +120,27 @@ export default function supportsCommaPosition(format: FormatFn) {
             alpha  ,
             delta  ,
             epsilon
-        `)
+        `
+      );
+    });
+
+    it('handles comments after commas', () => {
+      const result = format(
+        `SELECT alpha, --comment1
+        beta,--comment2
+        delta, epsilon,--comment3
+        iota --comment4`,
+        { commaPosition: 'tabular' }
+      );
+      expect(result).toBe(
+        dedent`
+          SELECT
+            alpha  , --comment1
+            beta   , --comment2
+            delta  ,
+            epsilon, --comment3
+            iota --comment4
+        `
       );
     });
 
@@ -112,7 +150,7 @@ export default function supportsCommaPosition(format: FormatFn) {
         { commaPosition: 'tabular', tabWidth: 6 }
       );
       expect(result).toBe(
-        dedent(`
+        dedent`
           SELECT
                 alpha     ,
                 MAX(beta) ,
@@ -124,7 +162,7 @@ export default function supportsCommaPosition(format: FormatFn) {
                 alpha  ,
                 delta  ,
                 epsilon
-        `)
+        `
       );
     });
 
@@ -134,13 +172,13 @@ export default function supportsCommaPosition(format: FormatFn) {
         useTabs: true,
       });
       expect(result).toBe(
-        dedent(`
+        dedent`
           SELECT
           \talpha     ,
           \tMAX(beta) ,
           \tdelta AS d,
           \tepsilon
-        `)
+        `
       );
     });
   });

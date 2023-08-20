@@ -1,6 +1,6 @@
 import dedent from 'dedent-js';
 
-import { FormatFn } from 'src/sqlFormatter';
+import { FormatFn } from '../../src/sqlFormatter.js';
 
 export default function supportsCase(format: FormatFn) {
   it('formats CASE ... WHEN with a blank expression', () => {
@@ -24,8 +24,7 @@ export default function supportsCase(format: FormatFn) {
     );
 
     expect(result).toBe(dedent`
-      CASE
-        trim(sqrt(2))
+      CASE trim(sqrt(2))
         WHEN 'one' THEN 1
         WHEN 'two' THEN 2
         WHEN 'three' THEN 3
@@ -43,8 +42,7 @@ export default function supportsCase(format: FormatFn) {
       SELECT
         foo,
         bar,
-        CASE
-          baz
+        CASE baz
           WHEN 'one' THEN 1
           WHEN 'two' THEN 2
           ELSE 3
@@ -84,8 +82,7 @@ export default function supportsCase(format: FormatFn) {
       { keywordCase: 'upper' }
     );
     expect(result).toBe(dedent`
-      CASE
-        TRIM(SQRT(my_field))
+      CASE TRIM(SQRT(my_field))
         WHEN 'one' THEN 1
         WHEN 'two' THEN 2
         WHEN 'three' THEN 3
@@ -100,13 +97,104 @@ export default function supportsCase(format: FormatFn) {
     expect(result).toBe(dedent`
       select
         sum(
-          case
-            a
+          case a
             when foo then bar
           end
         )
       from
         quaz
+    `);
+  });
+
+  it('formats CASE with comments', () => {
+    const result = format(`
+      SELECT CASE /*c1*/ foo /*c2*/
+      WHEN /*c3*/ 1 /*c4*/ THEN /*c5*/ 2 /*c6*/
+      ELSE /*c7*/ 3 /*c8*/
+      END;
+    `);
+
+    expect(result).toBe(dedent`
+      SELECT
+        CASE /*c1*/ foo /*c2*/
+          WHEN /*c3*/ 1 /*c4*/ THEN /*c5*/ 2 /*c6*/
+          ELSE /*c7*/ 3 /*c8*/
+        END;
+    `);
+  });
+
+  it('formats CASE with comments inside sub-expressions', () => {
+    const result = format(`
+      SELECT CASE foo + /*c1*/ bar
+      WHEN 1 /*c2*/ + 1 THEN 2 /*c2*/ * 2
+      ELSE 3 - /*c3*/ 3
+      END;
+    `);
+
+    expect(result).toBe(dedent`
+      SELECT
+        CASE foo + /*c1*/ bar
+          WHEN 1 /*c2*/ + 1 THEN 2 /*c2*/ * 2
+          ELSE 3 - /*c3*/ 3
+        END;
+    `);
+  });
+
+  it('formats CASE with identStyle:tabularLeft', () => {
+    const result = format('SELECT CASE foo WHEN 1 THEN bar ELSE baz END;', {
+      indentStyle: 'tabularLeft',
+    });
+
+    expect(result).toBe(dedent`
+      SELECT    CASE foo
+                          WHEN 1 THEN bar
+                          ELSE baz
+                END;
+    `);
+  });
+
+  it('formats CASE with identStyle:tabularRight', () => {
+    const result = format('SELECT CASE foo WHEN 1 THEN bar ELSE baz END;', {
+      indentStyle: 'tabularRight',
+    });
+
+    expect(result).toBe(
+      [
+        '   SELECT CASE foo',
+        '                    WHEN 1 THEN bar',
+        '                    ELSE baz',
+        '          END;',
+      ].join('\n')
+    );
+  });
+
+  // Not a pretty result.
+  // This test is more to ensure we don't crash on this code.
+  it('formats nested case expressions', () => {
+    const result = format(`
+      SELECT
+        CASE
+          CASE foo WHEN 1 THEN 11 ELSE 22 END
+          WHEN 11 THEN 110
+          WHEN 22 THEN 220
+          ELSE 123
+        END
+      FROM
+        tbl;
+    `);
+
+    expect(result).toBe(dedent`
+      SELECT
+        CASE CASE foo
+            WHEN 1 THEN 11
+            ELSE 22
+          END
+          WHEN 11 THEN 110
+          WHEN 22 THEN 220
+          ELSE 123
+        END
+      FROM
+        tbl;
     `);
   });
 }

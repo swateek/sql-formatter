@@ -16,7 +16,7 @@
     "import/no-extraneous-dependencies": [
       "error",
       {
-        "devDependencies": ["test/**", "**/*.test.js", "**/*.test.ts", "vscode/src/test/**"],
+        "devDependencies": ["test/**", "**/*.test.js", "**/*.test.ts"],
         "packageDir": ["./"]
       }
     ],
@@ -31,6 +31,7 @@
     "prefer-template": "off",
     "default-case": "off",
     "import/prefer-default-export": "off",
+    "import/extensions": ["error", "always"],
     "prettier/prettier": ["error"],
     "@typescript-eslint/no-use-before-define": "off",
     "@typescript-eslint/comma-dangle": "off",
@@ -44,7 +45,8 @@
       { "avoidEscape": true, "allowTemplateLiterals": true }
     ],
     "@typescript-eslint/semi": "error",
-    "@typescript-eslint/no-non-null-assertion": "error"
+    "@typescript-eslint/no-non-null-assertion": "error",
+    "@typescript-eslint/consistent-type-exports": "error"
   },
   "settings": {
     "import/resolver": {

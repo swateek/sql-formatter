@@ -1,18 +1,17 @@
 import dedent from 'dedent-js';
 
-import { FormatFn } from 'src/sqlFormatter';
-import behavesLikeSqlFormatter from './behavesLikeSqlFormatter';
+import { FormatFn } from '../src/sqlFormatter.js';
+import behavesLikeSqlFormatter from './behavesLikeSqlFormatter.js';
 
-import supportsDropTable from './features/dropTable';
-import supportsBetween from './features/between';
-import supportsConstraints from './features/constraints';
-import supportsDeleteFrom from './features/deleteFrom';
-import supportsComments from './features/comments';
-import supportsStrings from './features/strings';
-import supportsIdentifiers from './features/identifiers';
-import supportsInsertInto from './features/insertInto';
-import supportsUpdate from './features/update';
-import supportsTruncateTable from './features/truncateTable';
+import supportsDropTable from './features/dropTable.js';
+import supportsBetween from './features/between.js';
+import supportsDeleteFrom from './features/deleteFrom.js';
+import supportsComments from './features/comments.js';
+import supportsStrings from './features/strings.js';
+import supportsIdentifiers from './features/identifiers.js';
+import supportsInsertInto from './features/insertInto.js';
+import supportsUpdate from './features/update.js';
+import supportsTruncateTable from './features/truncateTable.js';
 
 /**
  * Shared tests for MySQL and MariaDB
@@ -20,10 +19,9 @@ import supportsTruncateTable from './features/truncateTable';
 export default function behavesLikeMariaDbFormatter(format: FormatFn) {
   behavesLikeSqlFormatter(format);
   supportsComments(format, { hashComments: true });
-  supportsStrings(format, ["''", '""', "X''"]);
+  supportsStrings(format, ["''-qq", "''-bs", '""-qq', '""-bs', "X''"]);
   supportsIdentifiers(format, ['``']);
   supportsDropTable(format, { ifExists: true });
-  supportsConstraints(format);
   supportsDeleteFrom(format);
   supportsInsertInto(format, { withoutInto: true });
   supportsUpdate(format);
@@ -104,10 +102,8 @@ export default function behavesLikeMariaDbFormatter(format: FormatFn) {
   // Issue #181
   it('does not wrap CHARACTER SET to multiple lines', () => {
     expect(format('ALTER TABLE t MODIFY col1 VARCHAR(50) CHARACTER SET greek')).toBe(dedent`
-      ALTER TABLE
-        t
-      MODIFY
-        col1 VARCHAR(50) CHARACTER SET greek
+      ALTER TABLE t
+      MODIFY col1 VARCHAR(50) CHARACTER SET greek
     `);
   });
 

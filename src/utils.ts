@@ -15,18 +15,12 @@ export const maxLength = (strings: string[]) =>
 // replaces long whitespace sequences with just one space
 export const equalizeWhitespace = (s: string) => s.replace(/\s+/gu, ' ');
 
-// Adds up all values in array
-export const sum = (arr: number[]): number => {
-  let total = 0;
-  for (const x of arr) {
-    total += x;
-  }
-  return total;
-};
-
 // Used for flattening keyword lists
 export const flatKeywordList = (obj: Record<string, string[]>): string[] =>
   dedupe(Object.values(obj).flat());
+
+// True when string contains multiple lines
+export const isMultiline = (text: string): boolean => /\n/.test(text);
 
 // Given a type and a field name, returns a type where this field is optional
 //

@@ -1,4 +1,5 @@
-import { Token, TokenType } from 'src/lexer/token';
+import { lineColFromIndex } from '../lexer/lineColFromIndex.js';
+import { Token, TokenType } from '../lexer/token.js';
 
 // Nearly type definitions say that Token must have a value field,
 // which however is wrong.  Instead Nearley expects a text field.
@@ -7,10 +8,12 @@ type NearleyToken = Token & { value: string };
 export default class LexerAdapter {
   private index = 0;
   private tokens: Token[] = [];
+  private input = '';
 
   constructor(private tokenize: (chunk: string) => Token[]) {}
 
   reset(chunk: string, _info: any) {
+    this.input = chunk;
     this.index = 0;
     this.tokens = this.tokenize(chunk);
   }
@@ -22,7 +25,8 @@ export default class LexerAdapter {
   save(): any {}
 
   formatError(token: NearleyToken) {
-    return `Parse error at token: ${token.text}`;
+    const { line, col } = lineColFromIndex(this.input, token.start);
+    return `Parse error at token: ${token.text} at line ${line} column ${col}`;
   }
 
   has(name: string): boolean {

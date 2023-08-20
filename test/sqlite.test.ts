@@ -1,27 +1,27 @@
 import dedent from 'dedent-js';
-import { format as originalFormat, FormatFn } from 'src/sqlFormatter';
-import SqliteFormatter from 'src/languages/sqlite/sqlite.formatter';
-import behavesLikeSqlFormatter from './behavesLikeSqlFormatter';
+import { format as originalFormat, FormatFn } from '../src/sqlFormatter.js';
+import behavesLikeSqlFormatter from './behavesLikeSqlFormatter.js';
 
-import supportsCreateTable from './features/createTable';
-import supportsDropTable from './features/dropTable';
-import supportsAlterTable from './features/alterTable';
-import supportsSchema from './features/schema';
-import supportsStrings from './features/strings';
-import supportsBetween from './features/between';
-import supportsJoin from './features/join';
-import supportsOperators from './features/operators';
-import supportsConstraints from './features/constraints';
-import supportsDeleteFrom from './features/deleteFrom';
-import supportsComments from './features/comments';
-import supportsIdentifiers from './features/identifiers';
-import supportsParams from './options/param';
-import supportsWindow from './features/window';
-import supportsSetOperations from './features/setOperations';
-import supportsLimiting from './features/limiting';
-import supportsInsertInto from './features/insertInto';
-import supportsUpdate from './features/update';
-import supportsCreateView from './features/createView';
+import supportsCreateTable from './features/createTable.js';
+import supportsDropTable from './features/dropTable.js';
+import supportsAlterTable from './features/alterTable.js';
+import supportsSchema from './features/schema.js';
+import supportsStrings from './features/strings.js';
+import supportsBetween from './features/between.js';
+import supportsJoin from './features/join.js';
+import supportsOperators from './features/operators.js';
+import supportsConstraints from './features/constraints.js';
+import supportsDeleteFrom from './features/deleteFrom.js';
+import supportsComments from './features/comments.js';
+import supportsIdentifiers from './features/identifiers.js';
+import supportsParams from './options/param.js';
+import supportsWindow from './features/window.js';
+import supportsSetOperations from './features/setOperations.js';
+import supportsLimiting from './features/limiting.js';
+import supportsInsertInto from './features/insertInto.js';
+import supportsUpdate from './features/update.js';
+import supportsCreateView from './features/createView.js';
+import supportsOnConflict from './features/onConflict.js';
 
 describe('SqliteFormatter', () => {
   const language = 'sqlite';
@@ -29,10 +29,10 @@ describe('SqliteFormatter', () => {
 
   behavesLikeSqlFormatter(format);
   supportsComments(format);
-  supportsCreateView(format);
+  supportsCreateView(format, { ifNotExists: true });
   supportsCreateTable(format, { ifNotExists: true });
   supportsDropTable(format, { ifExists: true });
-  supportsConstraints(format);
+  supportsConstraints(format, ['SET NULL', 'SET DEFAULT', 'CASCADE', 'RESTRICT', 'NO ACTION']);
   supportsAlterTable(format, {
     addColumn: true,
     dropColumn: true,
@@ -41,14 +41,15 @@ describe('SqliteFormatter', () => {
   });
   supportsDeleteFrom(format);
   supportsInsertInto(format);
+  supportsOnConflict(format);
   supportsUpdate(format);
-  supportsStrings(format, ["''", "X''"]);
-  supportsIdentifiers(format, [`""`, '``', '[]']);
+  supportsStrings(format, ["''-qq", "X''"]);
+  supportsIdentifiers(format, [`""-qq`, '``', '[]']);
   supportsBetween(format);
   supportsSchema(format);
   supportsJoin(format);
   supportsSetOperations(format, ['UNION', 'UNION ALL', 'EXCEPT', 'INTERSECT']);
-  supportsOperators(format, SqliteFormatter.operators);
+  supportsOperators(format, ['%', '~', '&', '|', '<<', '>>', '==', '->', '->>', '||']);
   supportsParams(format, { positional: true, numbered: ['?'], named: [':', '$', '@'] });
   supportsWindow(format);
   supportsLimiting(format, { limit: true, offset: true });

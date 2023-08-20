@@ -1,12 +1,11 @@
-import { expandPhrases } from 'src/expandPhrases';
-import Formatter from 'src/formatter/Formatter';
-import Tokenizer from 'src/lexer/Tokenizer';
-import { functions } from './sql.functions';
-import { keywords } from './sql.keywords';
+import { DialectOptions } from '../../dialect.js';
+import { expandPhrases } from '../../expandPhrases.js';
+import { functions } from './sql.functions.js';
+import { keywords } from './sql.keywords.js';
 
 const reservedSelect = expandPhrases(['SELECT [ALL | DISTINCT]']);
 
-const reservedCommands = expandPhrases([
+const reservedClauses = expandPhrases([
   // queries
   'WITH [RECURSIVE]',
   'FROM',
@@ -24,16 +23,19 @@ const reservedCommands = expandPhrases([
   'INSERT INTO',
   'VALUES',
   // - update:
-  'UPDATE',
   'SET',
-  'WHERE CURRENT OF',
-  // - delete:
-  'DELETE FROM',
-  // - truncate:
-  'TRUNCATE TABLE',
   // Data definition
   'CREATE [RECURSIVE] VIEW',
   'CREATE [GLOBAL TEMPORARY | LOCAL TEMPORARY] TABLE',
+]);
+
+const onelineClauses = expandPhrases([
+  // - update:
+  'UPDATE',
+  'WHERE CURRENT OF',
+  // - delete:
+  'DELETE FROM',
+  // - drop table:
   'DROP TABLE',
   // - alter table:
   'ALTER TABLE',
@@ -46,7 +48,8 @@ const reservedCommands = expandPhrases([
   'ADD SCOPE', // for alter column
   'DROP SCOPE {CASCADE | RESTRICT}', // for alter column
   'RESTART WITH', // for alter column
-
+  // - truncate:
+  'TRUNCATE TABLE',
   // other
   'SET SCHEMA',
 ]);
@@ -65,24 +68,29 @@ const reservedJoins = expandPhrases([
   'NATURAL {LEFT | RIGHT | FULL} [OUTER] JOIN',
 ]);
 
-const reservedPhrases = expandPhrases(['ON DELETE', 'ON UPDATE', '{ROWS | RANGE} BETWEEN']);
+const reservedPhrases = expandPhrases([
+  'ON {UPDATE | DELETE} [SET NULL | SET DEFAULT]',
+  '{ROWS | RANGE} BETWEEN',
+]);
 
-export default class SqlFormatter extends Formatter {
-  static operators = [];
-
-  tokenizer() {
-    return new Tokenizer({
-      reservedCommands,
-      reservedSelect,
-      reservedSetOperations,
-      reservedJoins,
-      reservedDependentClauses: ['WHEN', 'ELSE'],
-      reservedPhrases,
-      reservedKeywords: keywords,
-      reservedFunctionNames: functions,
-      stringTypes: [{ quote: "''", prefixes: ['N', 'X', 'U&'] }],
-      identTypes: [`""`, '``'],
-      paramTypes: { positional: true },
-    });
-  }
-}
+export const sql: DialectOptions = {
+  tokenizerOptions: {
+    reservedSelect,
+    reservedClauses: [...reservedClauses, ...onelineClauses],
+    reservedSetOperations,
+    reservedJoins,
+    reservedPhrases,
+    reservedKeywords: keywords,
+    reservedFunctionNames: functions,
+    stringTypes: [
+      { quote: "''-qq-bs", prefixes: ['N', 'U&'] },
+      { quote: "''-raw", prefixes: ['X'], requirePrefix: true },
+    ],
+    identTypes: [`""-qq`, '``'],
+    paramTypes: { positional: true },
+    operators: ['||'],
+  },
+  formatOptions: {
+    onelineClauses,
+  },
+};

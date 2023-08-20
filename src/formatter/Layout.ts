@@ -1,6 +1,6 @@
-import { last } from 'src/utils';
+import { last } from '../utils.js';
 
-import Indentation from './Indentation';
+import Indentation from './Indentation.js';
 
 /** Whitespace modifiers to be used with add() method */
 export enum WS {
@@ -102,6 +102,13 @@ export default class Layout {
    */
   public toString(): string {
     return this.items.map(item => this.itemToString(item)).join('');
+  }
+
+  /**
+   * Returns the internal layout data
+   */
+  public getLayoutItems(): LayoutItem[] {
+    return this.items;
   }
 
   private itemToString(item: LayoutItem): string {

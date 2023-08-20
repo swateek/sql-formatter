@@ -1,9 +1,9 @@
-import { FormatOptions } from 'src/FormatOptions';
-import { equalizeWhitespace } from 'src/utils';
+import { FormatOptions } from '../FormatOptions.js';
+import { equalizeWhitespace, isMultiline, last } from '../utils.js';
 
-import Params from 'src/formatter/Params';
-import { isTabularStyle } from 'src/formatter/config';
-import { TokenType } from 'src/lexer/token';
+import Params from './Params.js';
+import { isTabularStyle } from './config.js';
+import { TokenType } from '../lexer/token.js';
 import {
   AllColumnsAsteriskNode,
   ArraySubscriptNode,
@@ -23,23 +23,43 @@ import {
   BlockCommentNode,
   CommaNode,
   KeywordNode,
-} from 'src/parser/ast';
+  PropertyAccessNode,
+  CommentNode,
+  CaseExpressionNode,
+  CaseWhenNode,
+  CaseElseNode,
+} from '../parser/ast.js';
 
-import InlineBlock from './InlineBlock';
-import Layout, { WS } from './Layout';
-import toTabularFormat, { isTabularToken } from './tabularStyle';
+import Layout, { WS } from './Layout.js';
+import toTabularFormat, { isTabularToken } from './tabularStyle.js';
+import InlineLayout, { InlineLayoutError } from './InlineLayout.js';
 
 interface ExpressionFormatterParams {
   cfg: FormatOptions;
+  dialectCfg: ProcessedDialectFormatOptions;
   params: Params;
   layout: Layout;
   inline?: boolean;
 }
 
+export interface DialectFormatOptions {
+  // List of operators that should always be formatted without surrounding spaces
+  alwaysDenseOperators?: string[];
+  // List of clauses that should be formatted on a single line
+  onelineClauses: string[];
+}
+
+// Contains the same data as DialectFormatOptions,
+// but optimized for faster and more conventient lookup.
+export interface ProcessedDialectFormatOptions {
+  alwaysDenseOperators: string[];
+  onelineClauses: Record<string, boolean>;
+}
+
 /** Formats a generic SQL expression */
 export default class ExpressionFormatter {
   private cfg: FormatOptions;
-  private inlineBlock: InlineBlock;
+  private dialectCfg: ProcessedDialectFormatOptions;
   private params: Params;
   private layout: Layout;
 
@@ -47,10 +67,10 @@ export default class ExpressionFormatter {
   private nodes: AstNode[] = [];
   private index = -1;
 
-  constructor({ cfg, params, layout, inline = false }: ExpressionFormatterParams) {
+  constructor({ cfg, dialectCfg, params, layout, inline = false }: ExpressionFormatterParams) {
     this.cfg = cfg;
+    this.dialectCfg = dialectCfg;
     this.inline = inline;
-    this.inlineBlock = new InlineBlock(this.cfg.expressionWidth);
     this.params = params;
     this.layout = layout;
   }
@@ -65,15 +85,29 @@ export default class ExpressionFormatter {
   }
 
   private formatNode(node: AstNode) {
+    this.formatComments(node.leadingComments);
+    this.formatNodeWithoutComments(node);
+    this.formatComments(node.trailingComments);
+  }
+
+  private formatNodeWithoutComments(node: AstNode) {
     switch (node.type) {
       case NodeType.function_call:
         return this.formatFunctionCall(node);
       case NodeType.array_subscript:
         return this.formatArraySubscript(node);
+      case NodeType.property_access:
+        return this.formatPropertyAccess(node);
       case NodeType.parenthesis:
         return this.formatParenthesis(node);
       case NodeType.between_predicate:
         return this.formatBetweenPredicate(node);
+      case NodeType.case_expression:
+        return this.formatCaseExpression(node);
+      case NodeType.case_when:
+        return this.formatCaseWhen(node);
+      case NodeType.case_else:
+        return this.formatCaseElse(node);
       case NodeType.clause:
         return this.formatClause(node);
       case NodeType.set_operation:
@@ -102,32 +136,44 @@ export default class ExpressionFormatter {
   }
 
   private formatFunctionCall(node: FunctionCallNode) {
-    this.layout.add(this.showKw(node.name));
-    this.formatParenthesis(node.parenthesis);
+    this.withComments(node.nameKw, () => {
+      this.layout.add(this.showKw(node.nameKw));
+    });
+    this.formatNode(node.parenthesis);
   }
 
-  private formatArraySubscript({ array, parenthesis }: ArraySubscriptNode) {
-    this.layout.add(array.type === NodeType.keyword ? this.showKw(array) : array.text);
-    this.formatParenthesis(parenthesis);
+  private formatArraySubscript(node: ArraySubscriptNode) {
+    this.withComments(node.array, () => {
+      this.layout.add(
+        node.array.type === NodeType.keyword ? this.showKw(node.array) : node.array.text
+      );
+    });
+    this.formatNode(node.parenthesis);
+  }
+
+  private formatPropertyAccess(node: PropertyAccessNode) {
+    this.formatNode(node.object);
+    this.layout.add(WS.NO_SPACE, '.');
+    this.formatNode(node.property);
   }
 
   private formatParenthesis(node: ParenthesisNode) {
-    const inline = this.inlineBlock.isInlineBlock(node);
+    const inlineLayout = this.formatInlineExpression(node.children);
 
-    if (inline) {
+    if (inlineLayout) {
       this.layout.add(node.openParen);
-      this.layout = this.formatSubExpression(node.children, inline);
+      this.layout.add(...inlineLayout.getLayoutItems());
       this.layout.add(WS.NO_SPACE, node.closeParen, WS.SPACE);
     } else {
       this.layout.add(node.openParen, WS.NEWLINE);
 
       if (isTabularStyle(this.cfg)) {
         this.layout.add(WS.INDENT);
-        this.layout = this.formatSubExpression(node.children, inline);
+        this.layout = this.formatSubExpression(node.children);
       } else {
         this.layout.indentation.increaseBlockLevel();
         this.layout.add(WS.INDENT);
-        this.layout = this.formatSubExpression(node.children, inline);
+        this.layout = this.formatSubExpression(node.children);
         this.layout.indentation.decreaseBlockLevel();
       }
 
@@ -136,38 +182,83 @@ export default class ExpressionFormatter {
   }
 
   private formatBetweenPredicate(node: BetweenPredicateNode) {
-    this.layout.add(this.showKw(node.between), WS.SPACE);
+    this.layout.add(this.showKw(node.betweenKw), WS.SPACE);
     this.layout = this.formatSubExpression(node.expr1);
-    this.layout.add(WS.NO_SPACE, WS.SPACE, this.showNonTabularKw(node.and), WS.SPACE);
+    this.layout.add(WS.NO_SPACE, WS.SPACE, this.showNonTabularKw(node.andKw), WS.SPACE);
     this.layout = this.formatSubExpression(node.expr2);
     this.layout.add(WS.SPACE);
   }
 
+  private formatCaseExpression(node: CaseExpressionNode) {
+    this.formatNode(node.caseKw);
+
+    this.layout.indentation.increaseBlockLevel();
+    this.layout = this.formatSubExpression(node.expr);
+    this.layout = this.formatSubExpression(node.clauses);
+    this.layout.indentation.decreaseBlockLevel();
+
+    this.layout.add(WS.NEWLINE, WS.INDENT);
+    this.formatNode(node.endKw);
+  }
+
+  private formatCaseWhen(node: CaseWhenNode) {
+    this.layout.add(WS.NEWLINE, WS.INDENT);
+    this.formatNode(node.whenKw);
+    this.layout = this.formatSubExpression(node.condition);
+    this.formatNode(node.thenKw);
+    this.layout = this.formatSubExpression(node.result);
+  }
+
+  private formatCaseElse(node: CaseElseNode) {
+    this.layout.add(WS.NEWLINE, WS.INDENT);
+    this.formatNode(node.elseKw);
+    this.layout = this.formatSubExpression(node.result);
+  }
+
   private formatClause(node: ClauseNode) {
-    if (isTabularStyle(this.cfg)) {
-      this.layout.add(WS.NEWLINE, WS.INDENT, this.showKw(node.name), WS.SPACE);
+    if (this.isOnelineClause(node)) {
+      this.formatClauseInOnelineStyle(node);
+    } else if (isTabularStyle(this.cfg)) {
+      this.formatClauseInTabularStyle(node);
     } else {
-      this.layout.add(WS.NEWLINE, WS.INDENT, this.showKw(node.name), WS.NEWLINE);
+      this.formatClauseInIndentedStyle(node);
     }
+  }
+
+  private isOnelineClause(node: ClauseNode): boolean {
+    return this.dialectCfg.onelineClauses[node.nameKw.text];
+  }
+
+  private formatClauseInIndentedStyle(node: ClauseNode) {
+    this.layout.add(WS.NEWLINE, WS.INDENT, this.showKw(node.nameKw), WS.NEWLINE);
     this.layout.indentation.increaseTopLevel();
-
-    if (!isTabularStyle(this.cfg)) {
-      this.layout.add(WS.INDENT);
-    }
+    this.layout.add(WS.INDENT);
     this.layout = this.formatSubExpression(node.children);
+    this.layout.indentation.decreaseTopLevel();
+  }
 
+  private formatClauseInOnelineStyle(node: ClauseNode) {
+    this.layout.add(WS.NEWLINE, WS.INDENT, this.showKw(node.nameKw), WS.SPACE);
+    this.layout = this.formatSubExpression(node.children);
+  }
+
+  private formatClauseInTabularStyle(node: ClauseNode) {
+    this.layout.add(WS.NEWLINE, WS.INDENT, this.showKw(node.nameKw), WS.SPACE);
+    this.layout.indentation.increaseTopLevel();
+    this.layout = this.formatSubExpression(node.children);
     this.layout.indentation.decreaseTopLevel();
   }
 
   private formatSetOperation(node: SetOperationNode) {
-    this.layout.add(WS.NEWLINE, WS.INDENT, this.showKw(node.name), WS.NEWLINE);
-
+    this.layout.add(WS.NEWLINE, WS.INDENT, this.showKw(node.nameKw), WS.NEWLINE);
     this.layout.add(WS.INDENT);
     this.layout = this.formatSubExpression(node.children);
   }
 
   private formatLimitClause(node: LimitClauseNode) {
-    this.layout.add(WS.NEWLINE, WS.INDENT, this.showKw(node.name));
+    this.withComments(node.limitKw, () => {
+      this.layout.add(WS.NEWLINE, WS.INDENT, this.showKw(node.limitKw));
+    });
     this.layout.indentation.increaseTopLevel();
 
     if (isTabularStyle(this.cfg)) {
@@ -203,23 +294,10 @@ export default class ExpressionFormatter {
   }
 
   private formatOperator({ text }: OperatorNode) {
-    // special operator
-    if (text === ':') {
+    if (this.cfg.denseOperators || this.dialectCfg.alwaysDenseOperators.includes(text)) {
+      this.layout.add(WS.NO_SPACE, text);
+    } else if (text === ':') {
       this.layout.add(WS.NO_SPACE, text, WS.SPACE);
-      return;
-    } else if (text === '.' || text === '::') {
-      this.layout.add(WS.NO_SPACE, text);
-      return;
-    }
-    // special case for PLSQL @ dblink syntax
-    else if (text === '@' && this.cfg.language === 'plsql') {
-      this.layout.add(WS.NO_SPACE, text);
-      return;
-    }
-
-    // other operators
-    if (this.cfg.denseOperators) {
-      this.layout.add(WS.NO_SPACE, text);
     } else {
       this.layout.add(text, WS.SPACE);
     }
@@ -233,23 +311,65 @@ export default class ExpressionFormatter {
     }
   }
 
+  private withComments(node: AstNode, fn: () => void) {
+    this.formatComments(node.leadingComments);
+    fn();
+    this.formatComments(node.trailingComments);
+  }
+
+  private formatComments(comments: CommentNode[] | undefined) {
+    if (!comments) {
+      return;
+    }
+    comments.forEach(com => {
+      if (com.type === NodeType.line_comment) {
+        this.formatLineComment(com);
+      } else {
+        this.formatBlockComment(com);
+      }
+    });
+  }
+
   private formatLineComment(node: LineCommentNode) {
-    if (/\n/.test(node.precedingWhitespace || '')) {
+    if (isMultiline(node.precedingWhitespace || '')) {
       this.layout.add(WS.NEWLINE, WS.INDENT, node.text, WS.MANDATORY_NEWLINE, WS.INDENT);
-    } else {
+    } else if (this.layout.getLayoutItems().length > 0) {
       this.layout.add(WS.NO_NEWLINE, WS.SPACE, node.text, WS.MANDATORY_NEWLINE, WS.INDENT);
+    } else {
+      // comment is the first item in code - no need to add preceding spaces
+      this.layout.add(node.text, WS.MANDATORY_NEWLINE, WS.INDENT);
     }
   }
 
   private formatBlockComment(node: BlockCommentNode) {
-    this.splitBlockComment(node.text).forEach(line => {
-      this.layout.add(WS.NEWLINE, WS.INDENT, line);
-    });
-    this.layout.add(WS.NEWLINE, WS.INDENT);
+    if (this.isMultilineBlockComment(node)) {
+      this.splitBlockComment(node.text).forEach(line => {
+        this.layout.add(WS.NEWLINE, WS.INDENT, line);
+      });
+      this.layout.add(WS.NEWLINE, WS.INDENT);
+    } else {
+      this.layout.add(node.text, WS.SPACE);
+    }
+  }
+
+  private isMultilineBlockComment(node: BlockCommentNode): boolean {
+    return isMultiline(node.text) || isMultiline(node.precedingWhitespace || '');
+  }
+
+  private isDocComment(comment: string): boolean {
+    const lines = comment.split(/\n/);
+    return (
+      // first line starts with /* or /**
+      /^\/\*\*?$/.test(lines[0]) &&
+      // intermediate lines start with *
+      lines.slice(1, lines.length - 1).every(line => /^\s*\*/.test(line)) &&
+      // last line ends with */
+      /^\s*\*\/$/.test(last(lines) as string)
+    );
   }
 
   // Breaks up block comment to multiple lines.
-  // For example this comment (dots representing leading whitespace):
+  // For example this doc-comment (dots representing leading whitespace):
   //
   //   ..../**
   //   .....* Some description here
@@ -263,45 +383,77 @@ export default class ExpressionFormatter {
   //     '.* and here too',
   //     '.*/' ]
   //
+  // However, a normal comment (non-doc-comment) like this:
+  //
+  //   ..../*
+  //   ....Some description here
+  //   ....*/
+  //
+  // gets broken to this array (no leading spaces):
+  //
+  //   [ '/*',
+  //     'Some description here',
+  //     '*/' ]
+  //
   private splitBlockComment(comment: string): string[] {
-    return comment.split(/\n/).map(line => {
-      if (/^\s*\*/.test(line)) {
-        return ' ' + line.replace(/^\s*/, '');
-      } else {
-        return line.replace(/^\s*/, '');
-      }
-    });
+    if (this.isDocComment(comment)) {
+      return comment.split(/\n/).map(line => {
+        if (/^\s*\*/.test(line)) {
+          return ' ' + line.replace(/^\s*/, '');
+        } else {
+          return line;
+        }
+      });
+    } else {
+      return comment.split(/\n/).map(line => line.replace(/^\s*/, ''));
+    }
   }
 
-  private formatSubExpression(nodes: AstNode[], inline = this.inline): Layout {
+  private formatSubExpression(nodes: AstNode[]): Layout {
     return new ExpressionFormatter({
       cfg: this.cfg,
+      dialectCfg: this.dialectCfg,
       params: this.params,
       layout: this.layout,
-      inline,
+      inline: this.inline,
     }).format(nodes);
+  }
+
+  private formatInlineExpression(nodes: AstNode[]): Layout | undefined {
+    const oldParamIndex = this.params.getPositionalParameterIndex();
+    try {
+      return new ExpressionFormatter({
+        cfg: this.cfg,
+        dialectCfg: this.dialectCfg,
+        params: this.params,
+        layout: new InlineLayout(this.cfg.expressionWidth),
+        inline: true,
+      }).format(nodes);
+    } catch (e) {
+      if (e instanceof InlineLayoutError) {
+        // While formatting, some of the positional parameters might have
+        // been consumed, which increased the current parameter index.
+        // We reset the index to an earlier state, so we can run the
+        // formatting again and re-consume these parameters in non-inline mode.
+        this.params.setPositionalParameterIndex(oldParamIndex);
+        return undefined;
+      } else {
+        // forward all unexpected errors
+        throw e;
+      }
+    }
   }
 
   private formatKeywordNode(node: KeywordNode): void {
     switch (node.tokenType) {
       case TokenType.RESERVED_JOIN:
         return this.formatJoin(node);
-      case TokenType.RESERVED_DEPENDENT_CLAUSE:
-        return this.formatDependentClause(node);
       case TokenType.AND:
       case TokenType.OR:
       case TokenType.XOR:
         return this.formatLogicalOperator(node);
-      case TokenType.RESERVED_KEYWORD:
-      case TokenType.RESERVED_FUNCTION_NAME:
-      case TokenType.RESERVED_PHRASE:
-        return this.formatKeyword(node);
-      case TokenType.CASE:
-        return this.formatCaseStart(node);
-      case TokenType.END:
-        return this.formatCaseEnd(node);
       default:
-        throw new Error(`Unexpected token type: ${node.tokenType}`);
+        return this.formatKeyword(node);
     }
   }
 
@@ -320,10 +472,6 @@ export default class ExpressionFormatter {
     this.layout.add(this.showKw(node), WS.SPACE);
   }
 
-  private formatDependentClause(node: KeywordNode) {
-    this.layout.add(WS.NEWLINE, WS.INDENT, this.showKw(node), WS.SPACE);
-  }
-
   private formatLogicalOperator(node: KeywordNode) {
     if (this.cfg.logicalOperatorNewline === 'before') {
       if (isTabularStyle(this.cfg)) {
@@ -337,21 +485,6 @@ export default class ExpressionFormatter {
     } else {
       this.layout.add(this.showKw(node), WS.NEWLINE, WS.INDENT);
     }
-  }
-
-  private formatCaseStart(node: KeywordNode) {
-    this.layout.indentation.increaseBlockLevel();
-    this.layout.add(this.showKw(node), WS.NEWLINE, WS.INDENT);
-  }
-
-  private formatCaseEnd(node: KeywordNode) {
-    this.formatMultilineBlockEnd(node);
-  }
-
-  private formatMultilineBlockEnd(node: KeywordNode) {
-    this.layout.indentation.decreaseBlockLevel();
-
-    this.layout.add(WS.NEWLINE, WS.INDENT, this.showKw(node), WS.SPACE);
   }
 
   private showKw(node: KeywordNode): string {

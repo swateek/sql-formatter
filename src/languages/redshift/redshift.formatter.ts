@@ -1,12 +1,11 @@
-import { expandPhrases } from 'src/expandPhrases';
-import Formatter from 'src/formatter/Formatter';
-import Tokenizer from 'src/lexer/Tokenizer';
-import { functions } from './redshift.functions';
-import { keywords } from './redshift.keywords';
+import { DialectOptions } from '../../dialect.js';
+import { expandPhrases } from '../../expandPhrases.js';
+import { functions } from './redshift.functions.js';
+import { keywords } from './redshift.keywords.js';
 
 const reservedSelect = expandPhrases(['SELECT [ALL | DISTINCT]']);
 
-const reservedCommands = expandPhrases([
+const reservedClauses = expandPhrases([
   // queries
   'WITH [RECURSIVE]',
   'FROM',
@@ -22,15 +21,18 @@ const reservedCommands = expandPhrases([
   'INSERT INTO',
   'VALUES',
   // - update:
-  'UPDATE',
   'SET',
-  // - delete:
-  'DELETE [FROM]',
-  // - truncate:
-  'TRUNCATE [TABLE]',
   // Data definition
   'CREATE [OR REPLACE | MATERIALIZED] VIEW',
   'CREATE [TEMPORARY | TEMP | LOCAL TEMPORARY | LOCAL TEMP] TABLE [IF NOT EXISTS]',
+]);
+
+const onelineClauses = expandPhrases([
+  // - update:
+  'UPDATE',
+  // - delete:
+  'DELETE [FROM]',
+  // - drop table:
   'DROP TABLE [IF EXISTS]',
   // - alter table:
   'ALTER TABLE',
@@ -42,7 +44,8 @@ const reservedCommands = expandPhrases([
   'ALTER COLUMN',
   'TYPE', // for alter column
   'ENCODE', // for alter column
-
+  // - truncate:
+  'TRUNCATE [TABLE]',
   // https://docs.aws.amazon.com/redshift/latest/dg/c_SQL_commands.html
   'ABORT',
   'ALTER DATABASE',
@@ -114,8 +117,6 @@ const reservedCommands = expandPhrases([
   'START TRANSACTION',
   'UNLOAD',
   'VACUUM',
-  // other
-  'ALTER COLUMN',
 ]);
 
 const reservedSetOperations = expandPhrases(['UNION [ALL]', 'EXCEPT', 'INTERSECT', 'MINUS']);
@@ -139,24 +140,37 @@ const reservedPhrases = expandPhrases([
 ]);
 
 // https://docs.aws.amazon.com/redshift/latest/dg/cm_chap_SQLCommandRef.html
-export default class RedshiftFormatter extends Formatter {
-  static operators = ['~', '|/', '||/', '<<', '>>', '||'];
-
-  tokenizer() {
-    return new Tokenizer({
-      reservedCommands,
-      reservedSelect,
-      reservedSetOperations,
-      reservedJoins,
-      reservedDependentClauses: ['WHEN', 'ELSE'],
-      reservedPhrases,
-      reservedKeywords: keywords,
-      reservedFunctionNames: functions,
-      stringTypes: ["''"],
-      identTypes: [`""`],
-      identChars: { first: '#' },
-      paramTypes: { numbered: ['$'] },
-      operators: RedshiftFormatter.operators,
-    });
-  }
-}
+export const redshift: DialectOptions = {
+  tokenizerOptions: {
+    reservedSelect,
+    reservedClauses: [...reservedClauses, ...onelineClauses],
+    reservedSetOperations,
+    reservedJoins,
+    reservedPhrases,
+    reservedKeywords: keywords,
+    reservedFunctionNames: functions,
+    stringTypes: ["''-qq"],
+    identTypes: [`""-qq`],
+    identChars: { first: '#' },
+    paramTypes: { numbered: ['$'] },
+    operators: [
+      '^',
+      '%',
+      '@',
+      '|/',
+      '||/',
+      '&',
+      '|',
+      // '#', conflicts with first char of identifier
+      '~',
+      '<<',
+      '>>',
+      '||',
+      '::',
+    ],
+  },
+  formatOptions: {
+    alwaysDenseOperators: ['::'],
+    onelineClauses,
+  },
+};

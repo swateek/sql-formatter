@@ -1,8 +1,8 @@
 @preprocessor typescript
 @{%
-import LexerAdapter from 'src/parser/LexerAdapter';
-import { NodeType } from 'src/parser/ast';
-import { Token, TokenType } from 'src/lexer/token';
+import LexerAdapter from './LexerAdapter.js';
+import { NodeType, AstNode, CommentNode, KeywordNode } from './ast.js';
+import { Token, TokenType } from '../lexer/token.js';
 
 // The lexer here is only to provide the has() method,
 // that's used inside the generated grammar definition.
@@ -16,14 +16,49 @@ const lexer = new LexerAdapter(chunk => []);
 // which otherwise produce single element nested inside two arrays
 const unwrap = <T>([[el]]: T[][]): T => el;
 
-const toKeywordNode = (token: Token) => ({
+const toKeywordNode = (token: Token): KeywordNode => ({
   type: NodeType.keyword,
   tokenType: token.type,
   text: token.text,
   raw: token.raw,
 });
+
+interface CommentAttachments {
+  leading?: CommentNode[];
+  trailing?: CommentNode[];
+}
+
+const addComments = (node: AstNode, { leading, trailing }: CommentAttachments): AstNode => {
+  if (leading?.length) {
+    node = { ...node, leadingComments: leading };
+  }
+  if (trailing?.length) {
+    node = { ...node, trailingComments: trailing };
+  }
+  return node;
+};
+
+const addCommentsToArray = (nodes: AstNode[], { leading, trailing }: CommentAttachments): AstNode[] => {
+  if (leading?.length) {
+    const [first, ...rest] = nodes;
+    nodes = [addComments(first, { leading }), ...rest];
+  }
+  if (trailing?.length) {
+    const lead = nodes.slice(0, -1);
+    const last = nodes[nodes.length-1];
+    nodes = [...lead, addComments(last, { trailing })];
+  }
+  return nodes;
+};
+
 %}
 @lexer lexer
+
+# Conventions:
+#
+# The _ rule matches optional comments.
+#
+# Similarly any rule name anding with _ (like "foo_") matches optional comments in the end.
 
 main -> statement:* {%
   ([statements]) => {
@@ -48,7 +83,7 @@ statement -> expressions_or_clauses (%DELIMITER | %EOF) {%
 %}
 
 # To avoid ambiguity, plain expressions can only come before clauses
-expressions_or_clauses -> expression:* clause:* {%
+expressions_or_clauses -> free_form_sql:* clause:* {%
   ([expressions, clauses]) => [...expressions, ...clauses]
 %}
 
@@ -58,31 +93,38 @@ clause ->
   | other_clause
   | set_operation ) {% unwrap %}
 
-limit_clause -> %LIMIT commaless_expression:+ (%COMMA expression:+):? {%
-  ([limitToken, exp1, optional]) => {
+limit_clause -> %LIMIT _ expression_chain_ (%COMMA free_form_sql:+):? {%
+  ([limitToken, _, exp1, optional]) => {
     if (optional) {
       const [comma, exp2] = optional;
       return {
         type: NodeType.limit_clause,
-        name: toKeywordNode(limitToken),
+        limitKw: addComments(toKeywordNode(limitToken), { trailing: _ }),
         offset: exp1,
         count: exp2,
       };
     } else {
       return {
         type: NodeType.limit_clause,
-        name: toKeywordNode(limitToken),
+        limitKw: addComments(toKeywordNode(limitToken), { trailing: _ }),
         count: exp1,
       };
     }
   }
 %}
 
-select_clause -> %RESERVED_SELECT (all_columns_asterisk expression:* | asteriskless_expression expression:*) {%
+select_clause -> %RESERVED_SELECT (all_columns_asterisk free_form_sql:* | asteriskless_free_form_sql free_form_sql:*) {%
   ([nameToken, [exp, expressions]]) => ({
     type: NodeType.clause,
-    name: toKeywordNode(nameToken),
+    nameKw: toKeywordNode(nameToken),
     children: [exp, ...expressions],
+  })
+%}
+select_clause -> %RESERVED_SELECT {%
+  ([nameToken]) => ({
+    type: NodeType.clause,
+    nameKw: toKeywordNode(nameToken),
+    children: [],
   })
 %}
 
@@ -90,56 +132,91 @@ all_columns_asterisk -> %ASTERISK {%
   () => ({ type: NodeType.all_columns_asterisk })
 %}
 
-other_clause -> %RESERVED_COMMAND expression:* {%
+other_clause -> %RESERVED_CLAUSE free_form_sql:* {%
   ([nameToken, children]) => ({
     type: NodeType.clause,
-    name: toKeywordNode(nameToken),
+    nameKw: toKeywordNode(nameToken),
     children,
   })
 %}
 
-set_operation -> %RESERVED_SET_OPERATION expression:* {%
+set_operation -> %RESERVED_SET_OPERATION free_form_sql:* {%
   ([nameToken, children]) => ({
     type: NodeType.set_operation,
-    name: toKeywordNode(nameToken),
+    nameKw: toKeywordNode(nameToken),
     children,
   })
 %}
 
-expression -> ( simple_expression | asterisk | comma ) {% unwrap %}
+expression_chain_ -> expression_with_comments_:+ {% id %}
 
-asteriskless_expression -> ( simple_expression | comma ) {% unwrap %}
+expression_chain -> expression _expression_with_comments:* {%
+  ([expr, chain]) => [expr, ...chain]
+%}
 
-commaless_expression -> ( simple_expression | asterisk ) {% unwrap %}
+andless_expression_chain -> andless_expression _andless_expression_with_comments:* {%
+  ([expr, chain]) => [expr, ...chain]
+%}
 
-simple_expression ->
+expression_with_comments_ -> expression _ {%
+  ([expr, _]) => addComments(expr, { trailing: _ })
+%}
+
+_expression_with_comments -> _ expression {%
+  ([_, expr]) => addComments(expr, { leading: _ })
+%}
+
+_andless_expression_with_comments -> _ andless_expression {%
+  ([_, expr]) => addComments(expr, { leading: _ })
+%}
+
+free_form_sql -> ( asteriskless_free_form_sql | asterisk ) {% unwrap %}
+
+asteriskless_free_form_sql ->
+  ( asteriskless_andless_expression
+  | logic_operator
+  | between_predicate
+  | comma
+  | comment
+  | other_keyword ) {% unwrap %}
+
+expression -> ( andless_expression | logic_operator ) {% unwrap %}
+
+andless_expression -> ( asteriskless_andless_expression | asterisk ) {% unwrap %}
+
+asteriskless_andless_expression ->
   ( array_subscript
+  | case_expression
   | function_call
+  | property_access
   | parenthesis
   | curly_braces
   | square_brackets
-  | between_predicate
-  | expression_token ) {% unwrap %}
+  | operator
+  | identifier
+  | parameter
+  | literal
+  | keyword ) {% unwrap %}
 
-array_subscript -> %ARRAY_IDENTIFIER square_brackets {%
-  ([arrayToken, brackets]) => ({
+array_subscript -> %ARRAY_IDENTIFIER _ square_brackets {%
+  ([arrayToken, _, brackets]) => ({
     type: NodeType.array_subscript,
-    array: { type: NodeType.identifier, text: arrayToken.text },
+    array: addComments({ type: NodeType.identifier, text: arrayToken.text}, { trailing: _ }),
     parenthesis: brackets,
   })
 %}
-array_subscript -> %ARRAY_KEYWORD square_brackets {%
-  ([arrayToken, brackets]) => ({
+array_subscript -> %ARRAY_KEYWORD _ square_brackets {%
+  ([arrayToken, _, brackets]) => ({
     type: NodeType.array_subscript,
-    array: toKeywordNode(arrayToken),
+    array: addComments(toKeywordNode(arrayToken), { trailing: _ }),
     parenthesis: brackets,
   })
 %}
 
-function_call -> %RESERVED_FUNCTION_NAME parenthesis {%
-  ([nameToken, parens]) => ({
+function_call -> %RESERVED_FUNCTION_NAME _ parenthesis {%
+  ([nameToken, _, parens]) => ({
     type: NodeType.function_call,
-    name: toKeywordNode(nameToken),
+    nameKw: addComments(toKeywordNode(nameToken), { trailing: _ }),
     parenthesis: parens,
   })
 %}
@@ -153,7 +230,7 @@ parenthesis -> "(" expressions_or_clauses ")" {%
   })
 %}
 
-curly_braces -> "{" expression:* "}" {%
+curly_braces -> "{" free_form_sql:* "}" {%
   ([open, children, close]) => ({
     type: NodeType.parenthesis,
     children: children,
@@ -162,7 +239,7 @@ curly_braces -> "{" expression:* "}" {%
   })
 %}
 
-square_brackets -> "[" expression:* "]" {%
+square_brackets -> "[" free_form_sql:* "]" {%
   ([open, children, close]) => ({
     type: NodeType.parenthesis,
     children: children,
@@ -171,27 +248,60 @@ square_brackets -> "[" expression:* "]" {%
   })
 %}
 
-between_predicate -> %BETWEEN commaless_expression %AND commaless_expression {%
-  ([betweenToken, expr1, andToken, expr2]) => ({
+property_access -> expression _ %DOT _ (identifier | array_subscript | all_columns_asterisk) {%
+  // Allowing property to be <array_subscript> is currently a hack.
+  // A better way would be to allow <property_access> on the left side of array_subscript,
+  // but we currently can't do that because of another hack that requires
+  // %ARRAY_IDENTIFIER on the left side of <array_subscript>.
+  ([object, _1, dot, _2, [property]]) => {
+    return {
+      type: NodeType.property_access,
+      object: addComments(object, { trailing: _1 }),
+      property: addComments(property, { leading: _2 }),
+    };
+  }
+%}
+
+between_predicate -> %BETWEEN _ andless_expression_chain _ %AND _ andless_expression {%
+  ([betweenToken, _1, expr1, _2, andToken, _3, expr2]) => ({
     type: NodeType.between_predicate,
-    between: toKeywordNode(betweenToken),
-    expr1: [expr1],
-    and: toKeywordNode(andToken),
-    expr2: [expr2],
+    betweenKw: toKeywordNode(betweenToken),
+    expr1: addCommentsToArray(expr1, { leading: _1, trailing: _2 }),
+    andKw: toKeywordNode(andToken),
+    expr2: [addComments(expr2, { leading: _3 })],
+  })
+%}
+
+case_expression -> %CASE _ expression_chain_:? case_clause:* %END {%
+  ([caseToken, _, expr, clauses, endToken]) => ({
+    type: NodeType.case_expression,
+    caseKw: addComments(toKeywordNode(caseToken), { trailing: _ }),
+    endKw: toKeywordNode(endToken),
+    expr: expr || [],
+    clauses,
+  })
+%}
+
+case_clause -> %WHEN _ expression_chain_ %THEN _ expression_chain_ {%
+  ([whenToken, _1, cond, thenToken, _2, expr]) => ({
+    type: NodeType.case_when,
+    whenKw: addComments(toKeywordNode(whenToken), { trailing: _1 }),
+    thenKw: addComments(toKeywordNode(thenToken), { trailing: _2 }),
+    condition: cond,
+    result: expr,
+  })
+%}
+case_clause -> %ELSE _ expression_chain_ {%
+  ([elseToken, _, expr]) => ({
+    type: NodeType.case_else,
+    elseKw: addComments(toKeywordNode(elseToken), { trailing: _ }),
+    result: expr,
   })
 %}
 
 comma -> ( %COMMA ) {% ([[token]]) => ({ type: NodeType.comma }) %}
 
 asterisk -> ( %ASTERISK ) {% ([[token]]) => ({ type: NodeType.operator, text: token.text }) %}
-
-expression_token ->
-  ( operator
-  | identifier
-  | parameter
-  | literal
-  | keyword
-  | comment ) {% unwrap %}
 
 operator -> ( %OPERATOR ) {% ([[token]]) => ({ type: NodeType.operator, text: token.text }) %}
 
@@ -204,7 +314,8 @@ parameter ->
   ( %NAMED_PARAMETER
   | %QUOTED_PARAMETER
   | %NUMBERED_PARAMETER
-  | %POSITIONAL_PARAMETER ) {% ([[token]]) => ({ type: NodeType.parameter, key: token.key, text: token.text }) %}
+  | %POSITIONAL_PARAMETER
+  | %CUSTOM_PARAMETER ) {% ([[token]]) => ({ type: NodeType.parameter, key: token.key, text: token.text }) %}
 
 literal ->
   ( %NUMBER
@@ -213,15 +324,26 @@ literal ->
 keyword ->
   ( %RESERVED_KEYWORD
   | %RESERVED_PHRASE
-  | %RESERVED_DEPENDENT_CLAUSE
-  | %RESERVED_JOIN
-  | %CASE
-  | %END
-  | %AND
+  | %RESERVED_JOIN ) {%
+  ([[token]]) => toKeywordNode(token)
+%}
+
+logic_operator ->
+  ( %AND
   | %OR
   | %XOR ) {%
   ([[token]]) => toKeywordNode(token)
 %}
+
+other_keyword ->
+  ( %WHEN
+  | %THEN
+  | %ELSE
+  | %END ) {%
+  ([[token]]) => toKeywordNode(token)
+%}
+
+_ -> comment:* {% ([comments]) => comments %}
 
 comment -> %LINE_COMMENT {%
   ([token]) => ({
@@ -231,5 +353,9 @@ comment -> %LINE_COMMENT {%
   })
 %}
 comment -> %BLOCK_COMMENT {%
-  ([token]) => ({ type: NodeType.block_comment, text: token.text })
+  ([token]) => ({
+    type: NodeType.block_comment,
+    text: token.text,
+    precedingWhitespace: token.precedingWhitespace,
+  })
 %}

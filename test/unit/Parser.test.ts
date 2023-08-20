@@ -1,19 +1,19 @@
-import Tokenizer from 'src/lexer/Tokenizer';
-import { createParser } from 'src/parser/createParser';
+import Tokenizer from '../../src/lexer/Tokenizer.js';
+import { createParser } from '../../src/parser/createParser.js';
 
 describe('Parser', () => {
   const parse = (sql: string) => {
     const tokenizer = new Tokenizer({
-      reservedCommands: ['FROM', 'WHERE', 'LIMIT', 'CREATE TABLE'],
+      reservedClauses: ['FROM', 'WHERE', 'LIMIT', 'CREATE TABLE'],
       reservedSelect: ['SELECT'],
-      reservedDependentClauses: ['WHEN', 'ELSE'],
       reservedSetOperations: ['UNION', 'UNION ALL'],
       reservedJoins: ['JOIN'],
       reservedFunctionNames: ['SQRT', 'CURRENT_TIME'],
       reservedKeywords: ['BETWEEN', 'LIKE', 'ON', 'USING'],
+      operators: [':'],
       extraParens: ['[]', '{}'],
-      stringTypes: ["''"],
-      identTypes: ['""'],
+      stringTypes: ["''-qq"],
+      identTypes: ['""-qq'],
     });
 
     return createParser(tokenizer).parse(sql, {});
@@ -33,6 +33,10 @@ describe('Parser', () => {
 
   it('parses array subscript', () => {
     expect(parse('SELECT my_array[5]')).toMatchSnapshot();
+  });
+
+  it('parses array subscript with comment', () => {
+    expect(parse('SELECT my_array /*haha*/ [5]')).toMatchSnapshot();
   });
 
   it('parses parenthesized expressions', () => {
@@ -67,6 +71,10 @@ describe('Parser', () => {
     expect(parse('SELECT *')).toMatchSnapshot();
   });
 
+  it('parses SELECT ident.*', () => {
+    expect(parse('SELECT ident.*')).toMatchSnapshot();
+  });
+
   it('parses function name with and without parameters', () => {
     expect(parse('SELECT CURRENT_TIME a, CURRENT_TIME() b;')).toMatchSnapshot();
   });
@@ -77,5 +85,13 @@ describe('Parser', () => {
 
   it('parses square brackets', () => {
     expect(parse('SELECT [1, 2, 3];')).toMatchSnapshot();
+  });
+
+  it('parses qualified.identifier.sequence', () => {
+    expect(parse('SELECT foo.bar.baz;')).toMatchSnapshot();
+  });
+
+  it('parses CASE expression', () => {
+    expect(parse('SELECT CASE foo WHEN 1+1 THEN 10 ELSE 20 END;')).toMatchSnapshot();
   });
 });

@@ -1,19 +1,19 @@
 import dedent from 'dedent-js';
 
-import { format as originalFormat, FormatFn } from 'src/sqlFormatter';
-import MySqlFormatter from 'src/languages/mysql/mysql.formatter';
-import behavesLikeMariaDbFormatter from './behavesLikeMariaDbFormatter';
+import { format as originalFormat, FormatFn } from '../src/sqlFormatter.js';
+import behavesLikeMariaDbFormatter from './behavesLikeMariaDbFormatter.js';
 
-import supportsJoin from './features/join';
-import supportsOperators from './features/operators';
-import supportsWindow from './features/window';
-import supportsSetOperations from './features/setOperations';
-import supportsLimiting from './features/limiting';
-import supportsCreateTable from './features/createTable';
-import supportsParams from './options/param';
-import supportsCreateView from './features/createView';
-import supportsAlterTable from './features/alterTable';
-import supportsStrings from './features/strings';
+import supportsJoin from './features/join.js';
+import supportsOperators from './features/operators.js';
+import supportsWindow from './features/window.js';
+import supportsSetOperations from './features/setOperations.js';
+import supportsLimiting from './features/limiting.js';
+import supportsCreateTable from './features/createTable.js';
+import supportsParams from './options/param.js';
+import supportsCreateView from './features/createView.js';
+import supportsAlterTable from './features/alterTable.js';
+import supportsStrings from './features/strings.js';
+import supportsConstraints from './features/constraints.js';
 
 describe('MySqlFormatter', () => {
   const language = 'mysql';
@@ -29,10 +29,22 @@ describe('MySqlFormatter', () => {
     additionally: ['STRAIGHT_JOIN'],
   });
   supportsSetOperations(format, ['UNION', 'UNION ALL', 'UNION DISTINCT']);
-  supportsOperators(format, MySqlFormatter.operators, ['AND', 'OR', 'XOR']);
+  supportsOperators(
+    format,
+    ['%', ':=', '&', '|', '^', '~', '<<', '>>', '<=>', '->', '->>', '&&', '||', '!'],
+    ['AND', 'OR', 'XOR']
+  );
   supportsWindow(format);
   supportsLimiting(format, { limit: true, offset: true });
   supportsCreateTable(format, { ifNotExists: true });
+  supportsConstraints(format, [
+    'RESTRICT',
+    'CASCADE',
+    'SET NULL',
+    'NO ACTION',
+    'NOW',
+    'CURRENT_TIMESTAMP',
+  ]);
   supportsParams(format, { positional: true });
   supportsCreateView(format, { orReplace: true });
   supportsAlterTable(format, {
@@ -43,11 +55,23 @@ describe('MySqlFormatter', () => {
     renameColumn: true,
   });
 
-  it(`supports @"name", @'name' variables`, () => {
-    expect(format(`SELECT @"foo fo", @'bar ar' FROM tbl;`)).toBe(dedent`
+  it(`supports @"name" variables`, () => {
+    expect(format(`SELECT @"foo fo", @"foo\\"x", @"foo""y" FROM tbl;`)).toBe(dedent`
       SELECT
         @"foo fo",
-        @'bar ar'
+        @"foo\\"x",
+        @"foo""y"
+      FROM
+        tbl;
+    `);
+  });
+
+  it(`supports @'name' variables`, () => {
+    expect(format(`SELECT @'bar ar', @'bar\\'x', @'bar''y' FROM tbl;`)).toBe(dedent`
+      SELECT
+        @'bar ar',
+        @'bar\\'x',
+        @'bar''y'
       FROM
         tbl;
     `);
@@ -60,17 +84,12 @@ describe('MySqlFormatter', () => {
          ALTER TABLE t ALTER COLUMN foo DROP DEFAULT;`
       )
     ).toBe(dedent`
-      ALTER TABLE
-        t
-      ALTER COLUMN
-        foo
-      SET DEFAULT
-        10;
+      ALTER TABLE t
+      ALTER COLUMN foo
+      SET DEFAULT 10;
 
-      ALTER TABLE
-        t
-      ALTER COLUMN
-        foo
+      ALTER TABLE t
+      ALTER COLUMN foo
       DROP DEFAULT;
     `);
   });

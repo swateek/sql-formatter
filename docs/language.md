@@ -2,6 +2,14 @@
 
 Specifies the SQL dialect to use.
 
+## Usage
+
+```ts
+import { format } from 'sql-formatter';
+
+const result = format('SELECT * FROM tbl', { dialect: 'sqlite' });
+```
+
 ## Options
 
 - `"sql"` - (default) [Standard SQL][]
@@ -15,39 +23,26 @@ Specifies the SQL dialect to use.
 - `"postgresql"` - [PostgreSQL][]
 - `"redshift"` - [Amazon Redshift][]
 - `"singlestoredb"` - [SingleStoreDB][]
+- `"snowflake"` - [Snowflake][]
 - `"spark"` - [Spark][]
 - `"sqlite"` - [SQLite][sqlite]
-- `"trino"` - [Trino][] / [Presto][]
-- `"tsql"` - [SQL Server Transact-SQL][tsql]
-- custom formatter class (see below)
+- `"transactsql"` or `"tsql"` - [SQL Server Transact-SQL][tsql]
+- `"trino"` - [Trino][] (should also work for [Presto][], which is very similar dialect, though technically different)
 
 The default `"sql"` dialect is meant for cases where you don't know which dialect of SQL you're about to format.
 It's not an auto-detection, it just supports a subset of features common enough in many SQL implementations.
 This might or might not work for your specific dialect.
 Better to always pick something more specific if possible.
 
-### Custom formatter class (experimental)
+## Impact on bundle size
 
-The language parameter can also be used to specify a custom formatter implementation:
+Using the `language` option has the downside that the used dialects are determined at runtime
+and therefore they all have to be bundled when e.g. building a bundle with Webpack.
+This can result in significant overhead when you only need to format one or two dialects.
 
-```ts
-import { format, Formatter, Tokenizer } from 'sql-formatter';
-
-class MyFormatter extends Formatter {
-  tokenizer() {
-    return new Tokenizer({
-      // See source code for examples of tokenizer config options
-      // For example: src/languages/sqlite/sqlite.formatter.ts
-    });
-  }
-}
-
-const result = format('SELECT * FROM tbl', { language: MyFormatter });
-```
-
-**NB!** This functionality is experimental and there are no stability guarantees for this API.
-The API of Formatter and Tokenizer classes can (and likely will) change in non-major releases.
-You likely only want to use this if your other alternative is to fork SQL Formatter.
+To solve this problem, version 12 of SQL Formatter introduces a new API,
+that allows explicitly importing the dialects.
+See docs for [dialect][] option.
 
 [standard sql]: https://en.wikipedia.org/wiki/SQL:2011
 [gcp bigquery]: https://cloud.google.com/bigquery
@@ -61,7 +56,9 @@ You likely only want to use this if your other alternative is to fork SQL Format
 [presto]: https://prestodb.io/docs/current/
 [amazon redshift]: https://docs.aws.amazon.com/redshift/latest/dg/cm_chap_SQLCommandRef.html
 [singlestoredb]: https://docs.singlestore.com/managed-service/en/reference.html
+[snowflake]: https://docs.snowflake.com/en/index.html
 [spark]: https://spark.apache.org/docs/latest/api/sql/index.html
 [sqlite]: https://sqlite.org/index.html
 [trino]: https://trino.io/docs/current/
 [tsql]: https://docs.microsoft.com/en-us/sql/sql-server/
+[dialect]: ./dialect.md

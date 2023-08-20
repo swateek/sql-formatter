@@ -1,12 +1,11 @@
-import { expandPhrases } from 'src/expandPhrases';
-import Formatter from 'src/formatter/Formatter';
-import Tokenizer from 'src/lexer/Tokenizer';
-import { functions } from './db2.functions';
-import { keywords } from './db2.keywords';
+import { DialectOptions } from '../../dialect.js';
+import { expandPhrases } from '../../expandPhrases.js';
+import { functions } from './db2.functions.js';
+import { keywords } from './db2.keywords.js';
 
 const reservedSelect = expandPhrases(['SELECT [ALL | DISTINCT]']);
 
-const reservedCommands = expandPhrases([
+const reservedClauses = expandPhrases([
   // queries
   'WITH',
   'FROM',
@@ -21,14 +20,7 @@ const reservedCommands = expandPhrases([
   'INSERT INTO',
   'VALUES',
   // - update:
-  'UPDATE',
   'SET',
-  'WHERE CURRENT OF',
-  'WITH {RR | RS | CS | UR}',
-  // - delete:
-  'DELETE FROM',
-  // - truncate:
-  'TRUNCATE [TABLE]',
   // - merge:
   'MERGE INTO',
   'WHEN [NOT] MATCHED [THEN]',
@@ -37,6 +29,16 @@ const reservedCommands = expandPhrases([
   // Data definition
   'CREATE [OR REPLACE] VIEW',
   'CREATE [GLOBAL TEMPORARY] TABLE',
+]);
+
+const onelineClauses = expandPhrases([
+  // - update:
+  'UPDATE',
+  'WHERE CURRENT OF',
+  'WITH {RR | RS | CS | UR}',
+  // - delete:
+  'DELETE FROM',
+  // - drop table:
   'DROP TABLE [HIERARCHY]',
   // alter table:
   'ALTER TABLE',
@@ -47,7 +49,12 @@ const reservedCommands = expandPhrases([
   'SET DATA TYPE', // for alter column
   'SET NOT NULL', // for alter column
   'DROP {IDENTITY | EXPRESSION | DEFAULT | NOT NULL}', // for alter column
-
+  // - truncate:
+  'TRUNCATE [TABLE]',
+  // other
+  'SET [CURRENT] SCHEMA',
+  'AFTER',
+  'GO',
   // https://www.ibm.com/docs/en/db2-for-zos/11?topic=statements-list-supported
   'ALLOCATE CURSOR',
   'ALTER DATABASE',
@@ -147,15 +154,10 @@ const reservedCommands = expandPhrases([
   'SET CURRENT TEMPORAL SYSTEM_TIME',
   'SET ENCRYPTION PASSWORD',
   'SET PATH',
-  'SET SCHEMA',
   'SET SESSION TIME ZONE',
   'SIGNAL',
   'VALUES INTO',
   'WHENEVER',
-  // other
-  'AFTER',
-  'GO',
-  'SET CURRENT SCHEMA',
 ]);
 
 const reservedSetOperations = expandPhrases(['UNION [ALL]', 'EXCEPT [ALL]', 'INTERSECT [ALL]']);
@@ -166,27 +168,34 @@ const reservedJoins = expandPhrases([
   '{INNER | CROSS} JOIN',
 ]);
 
-const reservedPhrases = expandPhrases(['ON DELETE', 'ON UPDATE', '{ROWS | RANGE} BETWEEN']);
+const reservedPhrases = expandPhrases([
+  'ON DELETE',
+  'ON UPDATE',
+  'SET NULL',
+  '{ROWS | RANGE} BETWEEN',
+]);
 
 // https://www.ibm.com/support/knowledgecenter/en/ssw_ibm_i_72/db2/rbafzintro.htm
-export default class Db2Formatter extends Formatter {
-  static operators = ['**', '¬=', '¬>', '¬<', '!>', '!<', '||'];
-
-  tokenizer() {
-    return new Tokenizer({
-      reservedCommands,
-      reservedSelect,
-      reservedSetOperations,
-      reservedJoins,
-      reservedDependentClauses: ['WHEN', 'ELSE', 'ELSEIF'],
-      reservedPhrases,
-      reservedKeywords: keywords,
-      reservedFunctionNames: functions,
-      stringTypes: [{ quote: "''", prefixes: ['G', 'N', 'X', 'BX', 'GX', 'UX', 'U&'] }],
-      identTypes: [`""`],
-      paramTypes: { positional: true, named: [':'] },
-      paramChars: { first: '@#$', rest: '@#$' },
-      operators: Db2Formatter.operators,
-    });
-  }
-}
+export const db2: DialectOptions = {
+  tokenizerOptions: {
+    reservedSelect,
+    reservedClauses: [...reservedClauses, ...onelineClauses],
+    reservedSetOperations,
+    reservedJoins,
+    reservedPhrases,
+    reservedKeywords: keywords,
+    reservedFunctionNames: functions,
+    stringTypes: [
+      { quote: "''-qq", prefixes: ['G', 'N', 'U&'] },
+      { quote: "''-raw", prefixes: ['X', 'BX', 'GX', 'UX'], requirePrefix: true },
+    ],
+    identTypes: [`""-qq`],
+    identChars: { first: '@#$' },
+    paramTypes: { positional: true, named: [':'] },
+    paramChars: { first: '@#$', rest: '@#$' },
+    operators: ['**', '¬=', '¬>', '¬<', '!>', '!<', '||'],
+  },
+  formatOptions: {
+    onelineClauses,
+  },
+};

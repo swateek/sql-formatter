@@ -1,9 +1,18 @@
-import { Token, TokenType } from 'src/lexer/token';
-import { WHITESPACE_REGEX } from './regexUtil';
+import { Token, TokenType } from './token.js';
+import { lineColFromIndex } from './lineColFromIndex.js';
+import { WHITESPACE_REGEX } from './regexUtil.js';
+
+export interface RegExpLike {
+  lastIndex: number;
+  exec(input: string): string[] | null;
+}
 
 export interface TokenRule {
   type: TokenType;
-  regex: RegExp;
+  // Normally a RegExp object.
+  // But to allow for more complex matching logic,
+  // an object can be given that implements a RegExpLike interface.
+  regex: RegExpLike;
   // Called with the raw string that was matched
   text?: (rawText: string) => string;
   key?: (rawText: string) => string;
@@ -37,13 +46,19 @@ export default class TokenizerEngine {
         // Get the next token and the token type
         token = this.getNextToken();
         if (!token) {
-          throw new Error(`Parse error: Unexpected "${input.slice(this.index, 100)}"`);
+          throw this.createParseError();
         }
 
         tokens.push({ ...token, precedingWhitespace });
       }
     }
     return tokens;
+  }
+
+  private createParseError(): Error {
+    const text = this.input.slice(this.index, this.index + 10);
+    const { line, col } = lineColFromIndex(this.input, this.index);
+    return new Error(`Parse error: Unexpected "${text}" at line ${line} column ${col}`);
   }
 
   private getWhitespace(): string | undefined {
@@ -80,7 +95,6 @@ export default class TokenizerEngine {
         raw: matchedText,
         text: rule.text ? rule.text(matchedText) : matchedText,
         start: this.index,
-        end: this.index + matchedText.length,
       };
 
       if (rule.key) {

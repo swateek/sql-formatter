@@ -1,13 +1,12 @@
-import Formatter from 'src/formatter/Formatter';
-import Tokenizer from 'src/lexer/Tokenizer';
-import { EOF_TOKEN, isToken, TokenType, Token } from 'src/lexer/token';
-import { expandPhrases } from 'src/expandPhrases';
-import { keywords } from './bigquery.keywords';
-import { functions } from './bigquery.functions';
+import { DialectOptions } from '../../dialect.js';
+import { EOF_TOKEN, isToken, TokenType, Token } from '../../lexer/token.js';
+import { expandPhrases } from '../../expandPhrases.js';
+import { keywords } from './bigquery.keywords.js';
+import { functions } from './bigquery.functions.js';
 
 const reservedSelect = expandPhrases(['SELECT [ALL | DISTINCT] [AS STRUCT | AS VALUE]']);
 
-const reservedCommands = expandPhrases([
+const reservedClauses = expandPhrases([
   // Queries: https://cloud.google.com/bigquery/docs/reference/standard-sql/query-syntax
   'WITH [RECURSIVE]',
   'FROM',
@@ -26,12 +25,7 @@ const reservedCommands = expandPhrases([
   'INSERT [INTO]',
   'VALUES',
   // - update:
-  'UPDATE',
   'SET',
-  // - delete:
-  'DELETE [FROM]',
-  // - truncate:
-  'TRUNCATE TABLE',
   // - merge:
   'MERGE [INTO]',
   'WHEN [NOT] MATCHED [BY SOURCE | BY TARGET] [THEN]',
@@ -39,6 +33,20 @@ const reservedCommands = expandPhrases([
   // Data definition, https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language
   'CREATE [OR REPLACE] [MATERIALIZED] VIEW [IF NOT EXISTS]',
   'CREATE [OR REPLACE] [TEMP|TEMPORARY|SNAPSHOT|EXTERNAL] TABLE [IF NOT EXISTS]',
+
+  'CLUSTER BY',
+  'FOR SYSTEM_TIME AS OF', // CREATE SNAPSHOT TABLE
+  'WITH CONNECTION',
+  'WITH PARTITION COLUMNS',
+  'REMOTE WITH CONNECTION',
+]);
+
+const onelineClauses = expandPhrases([
+  // - update:
+  'UPDATE',
+  // - delete:
+  'DELETE [FROM]',
+  // - drop table:
   'DROP [SNAPSHOT | EXTERNAL] TABLE [IF EXISTS]',
   // - alter table:
   'ALTER TABLE [IF EXISTS]',
@@ -50,29 +58,35 @@ const reservedCommands = expandPhrases([
   'SET OPTIONS', // for alter column
   'DROP NOT NULL', // for alter column
   'SET DATA TYPE', // for alter column
-
+  // - alter schema
+  'ALTER SCHEMA [IF EXISTS]',
+  // - alter view
+  'ALTER [MATERIALIZED] VIEW [IF EXISTS]',
+  // - alter bi_capacity
+  'ALTER BI_CAPACITY',
+  // - truncate:
+  'TRUNCATE TABLE',
+  // - create schema
   'CREATE SCHEMA [IF NOT EXISTS]',
   'DEFAULT COLLATE',
-  'CLUSTER BY',
-  'FOR SYSTEM_TIME AS OF', // CREATE SNAPSHOT TABLE
-  'WITH CONNECTION',
-  'WITH PARTITION COLUMNS',
+
+  // stored procedures
   'CREATE [OR REPLACE] [TEMP|TEMPORARY|TABLE] FUNCTION [IF NOT EXISTS]',
-  'REMOTE WITH CONNECTION',
-  'RETURNS TABLE',
   'CREATE [OR REPLACE] PROCEDURE [IF NOT EXISTS]',
+  // row access policy
   'CREATE [OR REPLACE] ROW ACCESS POLICY [IF NOT EXISTS]',
   'GRANT TO',
   'FILTER USING',
+  // capacity
   'CREATE CAPACITY',
   'AS JSON',
+  // reservation
   'CREATE RESERVATION',
+  // assignment
   'CREATE ASSIGNMENT',
+  // search index
   'CREATE SEARCH INDEX [IF NOT EXISTS]',
-  'ALTER SCHEMA [IF EXISTS]',
-
-  'ALTER [MATERIALIZED] VIEW [IF EXISTS]',
-  'ALTER BI_CAPACITY',
+  // drop
   'DROP SCHEMA [IF EXISTS]',
   'DROP [MATERIALIZED] VIEW [IF EXISTS]',
   'DROP [TABLE] FUNCTION [IF EXISTS]',
@@ -136,47 +150,49 @@ const reservedPhrases = expandPhrases([
   'NOT DETERMINISTIC',
   // inside window definitions
   '{ROWS | RANGE} BETWEEN',
+  // comparison operator
+  'IS [NOT] DISTINCT FROM',
 ]);
 
 // https://cloud.google.com/bigquery/docs/reference/#standard-sql-reference
-export default class BigQueryFormatter extends Formatter {
-  static operators = ['~', '>>', '<<', '||'];
-  // TODO: handle trailing comma in select clause
-
-  tokenizer() {
-    return new Tokenizer({
-      reservedCommands,
-      reservedSelect,
-      reservedSetOperations,
-      reservedJoins,
-      reservedDependentClauses: ['WHEN', 'ELSE'],
-      reservedPhrases,
-      reservedKeywords: keywords,
-      reservedFunctionNames: functions,
-      extraParens: ['[]'],
-      stringTypes: [
-        // The triple-quoted strings are listed first, so they get matched first.
-        // Otherwise the first two quotes of """ will get matched as an empty "" string.
-        { quote: '""".."""', prefixes: ['R', 'B', 'RB', 'BR'] },
-        { quote: "'''..'''", prefixes: ['R', 'B', 'RB', 'BR'] },
-        { quote: '""', prefixes: ['R', 'B', 'RB', 'BR'] },
-        { quote: "''", prefixes: ['R', 'B', 'RB', 'BR'] },
-      ],
-      identTypes: ['``'],
-      identChars: { dashes: true },
-      paramTypes: { positional: true, named: ['@'], quoted: ['@'] },
-      lineCommentTypes: ['--', '#'],
-      operators: BigQueryFormatter.operators,
-      postProcess,
-    });
-  }
-}
+export const bigquery: DialectOptions = {
+  tokenizerOptions: {
+    reservedSelect,
+    reservedClauses: [...reservedClauses, ...onelineClauses],
+    reservedSetOperations,
+    reservedJoins,
+    reservedPhrases,
+    reservedKeywords: keywords,
+    reservedFunctionNames: functions,
+    extraParens: ['[]'],
+    stringTypes: [
+      // The triple-quoted strings are listed first, so they get matched first.
+      // Otherwise the first two quotes of """ will get matched as an empty "" string.
+      { quote: '""".."""', prefixes: ['R', 'B', 'RB', 'BR'] },
+      { quote: "'''..'''", prefixes: ['R', 'B', 'RB', 'BR'] },
+      '""-bs',
+      "''-bs",
+      { quote: '""-raw', prefixes: ['R', 'B', 'RB', 'BR'], requirePrefix: true },
+      { quote: "''-raw", prefixes: ['R', 'B', 'RB', 'BR'], requirePrefix: true },
+    ],
+    identTypes: ['``'],
+    identChars: { dashes: true },
+    paramTypes: { positional: true, named: ['@'], quoted: ['@'] },
+    variableTypes: [{ regex: String.raw`@@\w+` }],
+    lineCommentTypes: ['--', '#'],
+    operators: ['&', '|', '^', '~', '>>', '<<', '||', '=>'],
+    postProcess,
+  },
+  formatOptions: {
+    onelineClauses,
+  },
+};
 
 function postProcess(tokens: Token[]): Token[] {
   return detectArraySubscripts(combineParameterizedTypes(tokens));
 }
 
-// Converts OFFSET token inside array from RESERVED_COMMAND to RESERVED_FUNCTION_NAME
+// Converts OFFSET token inside array from RESERVED_CLAUSE to RESERVED_FUNCTION_NAME
 // See: https://cloud.google.com/bigquery/docs/reference/standard-sql/functions-and-operators#array_subscript_operator
 function detectArraySubscripts(tokens: Token[]) {
   let prevToken = EOF_TOKEN;
@@ -205,7 +221,6 @@ function combineParameterizedTypes(tokens: Token[]) {
         raw: typeDefTokens.map(formatTypeDefToken('raw')).join(''),
         text: typeDefTokens.map(formatTypeDefToken('text')).join(''),
         start: token.start,
-        end: token.end + typeDefTokens.map(t => t.text.length).reduce((a, b) => a + b),
       });
       i = endIndex;
     } else {

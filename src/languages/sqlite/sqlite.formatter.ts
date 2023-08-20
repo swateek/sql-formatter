@@ -1,12 +1,11 @@
-import { expandPhrases } from 'src/expandPhrases';
-import Formatter from 'src/formatter/Formatter';
-import Tokenizer from 'src/lexer/Tokenizer';
-import { functions } from './sqlite.functions';
-import { keywords } from './sqlite.keywords';
+import { DialectOptions } from '../../dialect.js';
+import { expandPhrases } from '../../expandPhrases.js';
+import { functions } from './sqlite.functions.js';
+import { keywords } from './sqlite.keywords.js';
 
 const reservedSelect = expandPhrases(['SELECT [ALL | DISTINCT]']);
 
-const reservedCommands = expandPhrases([
+const reservedClauses = expandPhrases([
   // queries
   'WITH [RECURSIVE]',
   'FROM',
@@ -24,13 +23,20 @@ const reservedCommands = expandPhrases([
   'REPLACE INTO',
   'VALUES',
   // - update:
-  'UPDATE [OR ABORT | OR FAIL | OR IGNORE | OR REPLACE | OR ROLLBACK]',
   'SET',
-  // - delete:
-  'DELETE FROM',
   // Data definition
   'CREATE [TEMPORARY | TEMP] VIEW [IF NOT EXISTS]',
   'CREATE [TEMPORARY | TEMP] TABLE [IF NOT EXISTS]',
+]);
+
+const onelineClauses = expandPhrases([
+  // - update:
+  'UPDATE [OR ABORT | OR FAIL | OR IGNORE | OR REPLACE | OR ROLLBACK]',
+  // - insert:
+  'ON CONFLICT',
+  // - delete:
+  'DELETE FROM',
+  // - drop table:
   'DROP TABLE [IF EXISTS]',
   // - alter table:
   'ALTER TABLE',
@@ -38,8 +44,7 @@ const reservedCommands = expandPhrases([
   'DROP [COLUMN]',
   'RENAME [COLUMN]',
   'RENAME TO',
-
-  // other
+  // - set schema
   'SET SCHEMA',
 ]);
 
@@ -55,33 +60,31 @@ const reservedJoins = expandPhrases([
 ]);
 
 const reservedPhrases = expandPhrases([
-  'ON DELETE',
-  'ON UPDATE',
+  'ON {UPDATE | DELETE} [SET NULL | SET DEFAULT]',
   '{ROWS | RANGE | GROUPS} BETWEEN',
 ]);
 
-export default class SqliteFormatter extends Formatter {
-  // https://www.sqlite.org/lang_expr.html
-  static operators = ['~', '->', '->>', '||', '<<', '>>', '=='];
-
-  tokenizer() {
-    return new Tokenizer({
-      reservedCommands,
-      reservedSelect,
-      reservedSetOperations,
-      reservedJoins,
-      reservedDependentClauses: ['WHEN', 'ELSE'],
-      reservedPhrases,
-      reservedKeywords: keywords,
-      reservedFunctionNames: functions,
-      stringTypes: [
-        { quote: "''", prefixes: ['X'] },
-        // { quote: '""', prefixes: ['X'] }, // currently conflict with "" identifiers
-      ],
-      identTypes: [`""`, '``', '[]'],
-      // https://www.sqlite.org/lang_expr.html#parameters
-      paramTypes: { positional: true, numbered: ['?'], named: [':', '@', '$'] },
-      operators: SqliteFormatter.operators,
-    });
-  }
-}
+export const sqlite: DialectOptions = {
+  tokenizerOptions: {
+    reservedSelect,
+    reservedClauses: [...reservedClauses, ...onelineClauses],
+    reservedSetOperations,
+    reservedJoins,
+    reservedPhrases,
+    reservedKeywords: keywords,
+    reservedFunctionNames: functions,
+    stringTypes: [
+      "''-qq",
+      { quote: "''-raw", prefixes: ['X'], requirePrefix: true },
+      // Depending on context SQLite also supports double-quotes for strings,
+      // and single-quotes for identifiers.
+    ],
+    identTypes: [`""-qq`, '``', '[]'],
+    // https://www.sqlite.org/lang_expr.html#parameters
+    paramTypes: { positional: true, numbered: ['?'], named: [':', '@', '$'] },
+    operators: ['%', '~', '&', '|', '<<', '>>', '==', '->', '->>', '||'],
+  },
+  formatOptions: {
+    onelineClauses,
+  },
+};

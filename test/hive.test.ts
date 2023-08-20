@@ -1,29 +1,27 @@
 import dedent from 'dedent-js';
 
-import { format as originalFormat, FormatFn } from 'src/sqlFormatter';
+import { format as originalFormat, FormatFn } from '../src/sqlFormatter.js';
 
-import HiveFormatter from 'src/languages/hive/hive.formatter';
-import behavesLikeSqlFormatter from './behavesLikeSqlFormatter';
+import behavesLikeSqlFormatter from './behavesLikeSqlFormatter.js';
 
-import supportsCreateTable from './features/createTable';
-import supportsDropTable from './features/dropTable';
-import supportsAlterTable from './features/alterTable';
-import supportsSchema from './features/schema';
-import supportsStrings from './features/strings';
-import supportsBetween from './features/between';
-import supportsJoin from './features/join';
-import supportsOperators from './features/operators';
-import supportsArrayAndMapAccessors from './features/arrayAndMapAccessors';
-import supportsComments from './features/comments';
-import supportsIdentifiers from './features/identifiers';
-import supportsWindow from './features/window';
-import supportsSetOperations from './features/setOperations';
-import supportsLimiting from './features/limiting';
-import supportsUpdate from './features/update';
-import supportsDeleteFrom from './features/deleteFrom';
-import supportsTruncateTable from './features/truncateTable';
-import supportsMergeInto from './features/mergeInto';
-import supportsCreateView from './features/createView';
+import supportsCreateTable from './features/createTable.js';
+import supportsDropTable from './features/dropTable.js';
+import supportsAlterTable from './features/alterTable.js';
+import supportsStrings from './features/strings.js';
+import supportsBetween from './features/between.js';
+import supportsJoin from './features/join.js';
+import supportsOperators from './features/operators.js';
+import supportsArrayAndMapAccessors from './features/arrayAndMapAccessors.js';
+import supportsComments from './features/comments.js';
+import supportsIdentifiers from './features/identifiers.js';
+import supportsWindow from './features/window.js';
+import supportsSetOperations from './features/setOperations.js';
+import supportsLimiting from './features/limiting.js';
+import supportsUpdate from './features/update.js';
+import supportsDeleteFrom from './features/deleteFrom.js';
+import supportsTruncateTable from './features/truncateTable.js';
+import supportsMergeInto from './features/mergeInto.js';
+import supportsCreateView from './features/createView.js';
 
 describe('HiveFormatter', () => {
   const language = 'hive';
@@ -31,7 +29,7 @@ describe('HiveFormatter', () => {
 
   behavesLikeSqlFormatter(format);
   supportsComments(format);
-  supportsCreateView(format, { materialized: true });
+  supportsCreateView(format, { materialized: true, ifNotExists: true });
   supportsCreateTable(format, { ifNotExists: true });
   supportsDropTable(format, { ifExists: true });
   supportsAlterTable(format, { renameTo: true });
@@ -39,17 +37,16 @@ describe('HiveFormatter', () => {
   supportsDeleteFrom(format);
   supportsTruncateTable(format, { withoutTable: true });
   supportsMergeInto(format);
-  supportsStrings(format, ['""', "''"]);
+  supportsStrings(format, ['""-bs', "''-bs"]);
   supportsIdentifiers(format, ['``']);
   supportsBetween(format);
-  supportsSchema(format);
   supportsJoin(format, {
     without: ['NATURAL'],
     additionally: ['LEFT SEMI JOIN'],
     supportsUsing: false,
   });
   supportsSetOperations(format, ['UNION', 'UNION ALL', 'UNION DISTINCT']);
-  supportsOperators(format, HiveFormatter.operators);
+  supportsOperators(format, ['%', '~', '^', '|', '&', '<=>', '==', '!', '||']);
   supportsArrayAndMapAccessors(format);
   supportsWindow(format);
   supportsLimiting(format, { limit: true });

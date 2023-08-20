@@ -24,6 +24,8 @@ For those who have admin access on the repo, the new release publish flow is as 
 - Adrien Pyke <adpyke@gmail.com>
 - Ahmad Khan <ahmad.khan@educative.io>
 - Alexandr Kozhevnikov <aedkozhevnikov@sberbank.ru>
+- Alexander Prinzhorn <alexander@prinzhorn.it>
+- An Phi <aphi@skidmore.edu>
 - Andrew
 - Benjamin Bellamy
 - bingou
@@ -32,6 +34,7 @@ For those who have admin access on the repo, the new release publish flow is as 
 - Davut Can Abacigil <can@teamsql.io>
 - Erik Hirmo <erik.hirmo@roguewave.com>
 - George Leslie-Waksman <waksman@gmail.com>
+- Grant Forsythe <grantwforsythe@gmail.com>
 - htaketani <h.taketani@gmail.com>
 - Ian Campbell <icampbell@immuta.com>
 - ivan baktsheev
@@ -42,9 +45,12 @@ For those who have admin access on the repo, the new release publish flow is as 
 - Matheus Salmi <mathsalmi@gmail.com>
 - Matheus Teixeira <matheus.mtxr@gmail.com>
 - Michael Giannakopoulos <mgiannakopoulos@singlestore.com>
+- Nathan Walters <nwalters512@gmail.com>
 - Nicolas Dermine <nicolas.dermine@gmail.com>
 - Offir Baron <ofir@panoply.io>
 - Olexandr Sydorchuk <olexandr.syd@gmail.com>
+- Pavel Djundik <xPaw@users.noreply.github.com>
+- pokutuna <mail@pokutuna.com>
 - Rafael Pinto <raprp@posteo.de>
 - Rahel Rjadnev-Meristo <rahelini@gmail.com>
 - Rene Saarsoo <nene@triin.net>
@@ -52,9 +58,13 @@ For those who have admin access on the repo, the new release publish flow is as 
 - Romain Rigaux <hello@getromain.com>
 - Sasha Aliashkevich <olsender@gmail.com>
 - Sean Song <mail@seansong.dev>
+- Sebastian Lyng Johansen <seblyng98@gmail.com>
 - Sergei Egorov <sergei.egorov@zeroturnaround.com>
+- Stanislav Germanovskii <s.germanovskiy@tinkoff.ru>
 - Steven Yung <stevenyung@fastmail.com>
+- Tito Griné <tgrine@singlestore.com>
 - Toliver <teejae@gmail.com>
+- Toni Müller <toni.mueller@datameer.com>
 - Tyler Jones <tyler.jones@txwormhole.com>
 - Uku Pattak <ukupat@gmail.com>
 - Xin Hu <hoosin.git@gmail.com>

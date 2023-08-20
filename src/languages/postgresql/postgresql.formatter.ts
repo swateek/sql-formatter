@@ -1,12 +1,11 @@
-import { expandPhrases } from 'src/expandPhrases';
-import Formatter from 'src/formatter/Formatter';
-import Tokenizer from 'src/lexer/Tokenizer';
-import { functions } from './postgresql.functions';
-import { keywords } from './postgresql.keywords';
+import { DialectOptions } from '../../dialect.js';
+import { expandPhrases } from '../../expandPhrases.js';
+import { functions } from './postgresql.functions.js';
+import { keywords } from './postgresql.keywords.js';
 
 const reservedSelect = expandPhrases(['SELECT [ALL | DISTINCT]']);
 
-const reservedCommands = expandPhrases([
+const reservedClauses = expandPhrases([
   // queries
   'WITH [RECURSIVE]',
   'FROM',
@@ -19,22 +18,30 @@ const reservedCommands = expandPhrases([
   'LIMIT',
   'OFFSET',
   'FETCH {FIRST | NEXT}',
+  'FOR {UPDATE | NO KEY UPDATE | SHARE | KEY SHARE} [OF]',
   // Data manipulation
   // - insert:
   'INSERT INTO',
   'VALUES',
   // - update:
-  'UPDATE [ONLY]',
   'SET',
-  'WHERE CURRENT OF',
-  // - delete:
-  'DELETE FROM [ONLY]',
-  // - truncate:
-  'TRUNCATE [TABLE] [ONLY]',
   // Data definition
   'CREATE [OR REPLACE] [TEMP | TEMPORARY] [RECURSIVE] VIEW',
   'CREATE MATERIALIZED VIEW [IF NOT EXISTS]',
   'CREATE [GLOBAL | LOCAL] [TEMPORARY | TEMP | UNLOGGED] TABLE [IF NOT EXISTS]',
+  // other
+  'RETURNING',
+]);
+
+const onelineClauses = expandPhrases([
+  // - update:
+  'UPDATE [ONLY]',
+  'WHERE CURRENT OF',
+  // - insert:
+  'ON CONFLICT',
+  // - delete:
+  'DELETE FROM [ONLY]',
+  // - drop table:
   'DROP TABLE [IF EXISTS]',
   // - alter table:
   'ALTER TABLE [IF EXISTS] [ONLY]',
@@ -47,7 +54,11 @@ const reservedCommands = expandPhrases([
   '[SET DATA] TYPE', // for alter column
   '{SET | DROP} DEFAULT', // for alter column
   '{SET | DROP} NOT NULL', // for alter column
-
+  // - truncate:
+  'TRUNCATE [TABLE] [ONLY]',
+  // other
+  'SET SCHEMA',
+  'AFTER',
   // https://www.postgresql.org/docs/14/sql-commands.html
   'ABORT',
   'ALTER AGGREGATE',
@@ -142,7 +153,6 @@ const reservedCommands = expandPhrases([
   'DEALLOCATE',
   'DECLARE',
   'DISCARD',
-  'DO',
   'DROP ACCESS METHOD',
   'DROP AGGREGATE',
   'DROP CAST',
@@ -202,7 +212,6 @@ const reservedCommands = expandPhrases([
   'REINDEX',
   'RELEASE SAVEPOINT',
   'RESET',
-  'RETURNING',
   'REVOKE',
   'ROLLBACK',
   'ROLLBACK PREPARED',
@@ -218,9 +227,6 @@ const reservedCommands = expandPhrases([
   'START TRANSACTION',
   'UNLISTEN',
   'VACUUM',
-  // other
-  'AFTER',
-  'SET SCHEMA',
 ]);
 
 const reservedSetOperations = expandPhrases([
@@ -238,106 +244,124 @@ const reservedJoins = expandPhrases([
 ]);
 
 const reservedPhrases = expandPhrases([
-  'ON DELETE',
-  'ON UPDATE',
+  'ON {UPDATE | DELETE} [SET NULL | SET DEFAULT]',
   '{ROWS | RANGE | GROUPS} BETWEEN',
   // https://www.postgresql.org/docs/current/datatype-datetime.html
   '{TIMESTAMP | TIME} {WITH | WITHOUT} TIME ZONE',
+  // comparison operator
+  'IS [NOT] DISTINCT FROM',
 ]);
 
-const binaryOperators = [
-  // Math Operators
-  '<<',
-  '>>',
-  '|/',
-  '||/',
-  '!!',
-  // String Operators
-  '||',
-  // Pattern Matching Operators
-  '~~',
-  '~~*',
-  '!~~',
-  '!~~*',
-  // POSIX RegExp operators
-  '~',
-  '~*',
-  '!~',
-  '!~*',
-  // Similarity Operators
-  '<%',
-  '<<%',
-  '%>',
-  '%>>',
-  // Byte Comparison Operators
-  '~>~',
-  '~<~',
-  '~>=~',
-  '~<=~',
-  // Geometric operators
-  '@-@',
-  '@@',
-  '#',
-  '##',
-  '<->',
-  '&&',
-  '&<',
-  '&>',
-  '<<|',
-  '&<|',
-  '|>>',
-  '|&>',
-  '<^',
-  '^>',
-  '?#',
-  '?-',
-  '?|',
-  '?-|',
-  '?||',
-  '@>',
-  '<@',
-  '~=',
-  // Network Address operators
-  '>>=',
-  '<<=',
-  // Text Search Operators
-  '@@@',
-  // JSON Operators
-  '?',
-  '@?',
-  '?&',
-  '->',
-  '->>',
-  '#>',
-  '#>>',
-  '#-',
-  // Other Operators
-  ':=',
-  '::',
-  '=>',
-  '-|-',
-];
-
 // https://www.postgresql.org/docs/14/index.html
-export default class PostgreSqlFormatter extends Formatter {
-  static operators = binaryOperators;
-
-  tokenizer() {
-    return new Tokenizer({
-      reservedCommands,
-      reservedSelect,
-      reservedSetOperations,
-      reservedJoins,
-      reservedDependentClauses: ['WHEN', 'ELSE'],
-      reservedPhrases,
-      reservedKeywords: keywords,
-      reservedFunctionNames: functions,
-      extraParens: ['[]'],
-      stringTypes: ['$$', { quote: "''", prefixes: ['B', 'E', 'X', 'U&'] }],
-      identTypes: [{ quote: '""', prefixes: ['U&'] }],
-      identChars: { rest: '$' },
-      paramTypes: { numbered: ['$'] },
-      operators: PostgreSqlFormatter.operators,
-    });
-  }
-}
+export const postgresql: DialectOptions = {
+  tokenizerOptions: {
+    reservedSelect,
+    reservedClauses: [...reservedClauses, ...onelineClauses],
+    reservedSetOperations,
+    reservedJoins,
+    reservedPhrases,
+    reservedKeywords: keywords,
+    reservedFunctionNames: functions,
+    nestedBlockComments: true,
+    extraParens: ['[]'],
+    stringTypes: [
+      '$$',
+      { quote: "''-qq", prefixes: ['U&'] },
+      { quote: "''-bs", prefixes: ['E'], requirePrefix: true },
+      { quote: "''-raw", prefixes: ['B', 'X'], requirePrefix: true },
+    ],
+    identTypes: [{ quote: '""-qq', prefixes: ['U&'] }],
+    identChars: { rest: '$' },
+    paramTypes: { numbered: ['$'] },
+    operators: [
+      // Arithmetic
+      '%',
+      '^',
+      '|/',
+      '||/',
+      '@',
+      // Assignment
+      ':=',
+      // Bitwise
+      '&',
+      '|',
+      '#',
+      '~',
+      '<<',
+      '>>',
+      // Byte comparison
+      '~>~',
+      '~<~',
+      '~>=~',
+      '~<=~',
+      // Geometric
+      '@-@',
+      '@@',
+      '##',
+      '<->',
+      '&&',
+      '&<',
+      '&>',
+      '<<|',
+      '&<|',
+      '|>>',
+      '|&>',
+      '<^',
+      '^>',
+      '?#',
+      '?-',
+      '?|',
+      '?-|',
+      '?||',
+      '@>',
+      '<@',
+      '~=',
+      // JSON
+      '?',
+      '@?',
+      '?&',
+      '->',
+      '->>',
+      '#>',
+      '#>>',
+      '#-',
+      // Named function params
+      '=>',
+      // Network address
+      '>>=',
+      '<<=',
+      // Pattern matching
+      '~~',
+      '~~*',
+      '!~~',
+      '!~~*',
+      // POSIX RegExp
+      '~',
+      '~*',
+      '!~',
+      '!~*',
+      // Range/multirange
+      '-|-',
+      // String concatenation
+      '||',
+      // Text search
+      '@@@',
+      '!!',
+      // Trigram/trigraph
+      '<%',
+      '%>',
+      '<<%',
+      '%>>',
+      '<<->',
+      '<->>',
+      '<<<->',
+      '<->>>',
+      // Type cast
+      '::',
+    ],
+  },
+  formatOptions: {
+    alwaysDenseOperators: ['::'],
+    onelineClauses,
+  },
+};

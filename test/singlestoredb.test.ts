@@ -1,15 +1,15 @@
-import { format as originalFormat, FormatFn } from 'src/sqlFormatter';
-import SingleStoreDbFormatter from 'src/languages/singlestoredb/singlestoredb.formatter';
-import behavesLikeMariaDbFormatter from './behavesLikeMariaDbFormatter';
+import dedent from 'dedent-js';
+import { format as originalFormat, FormatFn } from '../src/sqlFormatter.js';
+import behavesLikeMariaDbFormatter from './behavesLikeMariaDbFormatter.js';
 
-import supportsJoin from './features/join';
-import supportsOperators from './features/operators';
-import supportsSetOperations from './features/setOperations';
-import supportsLimiting from './features/limiting';
-import supportsCreateTable from './features/createTable';
-import supportsCreateView from './features/createView';
-import supportsAlterTable from './features/alterTable';
-import supportsStrings from './features/strings';
+import supportsJoin from './features/join.js';
+import supportsOperators from './features/operators.js';
+import supportsSetOperations from './features/setOperations.js';
+import supportsLimiting from './features/limiting.js';
+import supportsCreateTable from './features/createTable.js';
+import supportsCreateView from './features/createView.js';
+import supportsAlterTable from './features/alterTable.js';
+import supportsStrings from './features/strings.js';
 
 describe('SingleStoreDbFormatter', () => {
   const language = 'singlestoredb';
@@ -32,7 +32,11 @@ describe('SingleStoreDbFormatter', () => {
     'INTERSECT',
     'MINUS',
   ]);
-  supportsOperators(format, SingleStoreDbFormatter.operators, ['AND', 'OR']);
+  supportsOperators(
+    format,
+    [':=', '&', '|', '^', '~', '<<', '>>', '<=>', '&&', '||', ':>', '!:>'],
+    ['AND', 'OR']
+  );
   supportsLimiting(format, { limit: true, offset: true });
   supportsCreateTable(format, { ifNotExists: true });
   supportsCreateView(format);
@@ -41,5 +45,38 @@ describe('SingleStoreDbFormatter', () => {
     dropColumn: true,
     modify: true,
     renameTo: true,
+  });
+
+  describe(`formats traversal of semi structured data`, () => {
+    it(`formats '::' path-operator without spaces`, () => {
+      expect(format(`SELECT * FROM foo WHERE json_foo::bar = 'foobar'`)).toBe(dedent`
+        SELECT
+          *
+        FROM
+          foo
+        WHERE
+          json_foo::bar = 'foobar'
+      `);
+    });
+    it(`formats '::$' conversion path-operator without spaces`, () => {
+      expect(format(`SELECT * FROM foo WHERE json_foo::$bar = 'foobar'`)).toBe(dedent`
+        SELECT
+          *
+        FROM
+          foo
+        WHERE
+          json_foo::$bar = 'foobar'
+      `);
+    });
+    it(`formats '::%' conversion path-operator without spaces`, () => {
+      expect(format(`SELECT * FROM foo WHERE json_foo::%bar = 'foobar'`)).toBe(dedent`
+        SELECT
+          *
+        FROM
+          foo
+        WHERE
+          json_foo::%bar = 'foobar'
+      `);
+    });
   });
 });

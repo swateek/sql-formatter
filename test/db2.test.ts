@@ -1,29 +1,28 @@
 import dedent from 'dedent-js';
 
-import { format as originalFormat, FormatFn } from 'src/sqlFormatter';
-import Db2Formatter from 'src/languages/db2/db2.formatter';
-import behavesLikeSqlFormatter from './behavesLikeSqlFormatter';
+import { format as originalFormat, FormatFn } from '../src/sqlFormatter.js';
+import behavesLikeSqlFormatter from './behavesLikeSqlFormatter.js';
 
-import supportsAlterTable from './features/alterTable';
-import supportsBetween from './features/between';
-import supportsCreateTable from './features/createTable';
-import supportsDropTable from './features/dropTable';
-import supportsJoin from './features/join';
-import supportsOperators from './features/operators';
-import supportsSchema from './features/schema';
-import supportsStrings from './features/strings';
-import supportsConstraints from './features/constraints';
-import supportsDeleteFrom from './features/deleteFrom';
-import supportsComments from './features/comments';
-import supportsIdentifiers from './features/identifiers';
-import supportsParams from './options/param';
-import supportsSetOperations from './features/setOperations';
-import supportsLimiting from './features/limiting';
-import supportsInsertInto from './features/insertInto';
-import supportsUpdate from './features/update';
-import supportsTruncateTable from './features/truncateTable';
-import supportsMergeInto from './features/mergeInto';
-import supportsCreateView from './features/createView';
+import supportsAlterTable from './features/alterTable.js';
+import supportsBetween from './features/between.js';
+import supportsCreateTable from './features/createTable.js';
+import supportsDropTable from './features/dropTable.js';
+import supportsJoin from './features/join.js';
+import supportsOperators from './features/operators.js';
+import supportsSchema from './features/schema.js';
+import supportsStrings from './features/strings.js';
+import supportsConstraints from './features/constraints.js';
+import supportsDeleteFrom from './features/deleteFrom.js';
+import supportsComments from './features/comments.js';
+import supportsIdentifiers from './features/identifiers.js';
+import supportsParams from './options/param.js';
+import supportsSetOperations from './features/setOperations.js';
+import supportsLimiting from './features/limiting.js';
+import supportsInsertInto from './features/insertInto.js';
+import supportsUpdate from './features/update.js';
+import supportsTruncateTable from './features/truncateTable.js';
+import supportsMergeInto from './features/mergeInto.js';
+import supportsCreateView from './features/createView.js';
 
 describe('Db2Formatter', () => {
   const language = 'db2';
@@ -34,7 +33,7 @@ describe('Db2Formatter', () => {
   supportsCreateView(format, { orReplace: true });
   supportsCreateTable(format);
   supportsDropTable(format);
-  supportsConstraints(format);
+  supportsConstraints(format, ['NO ACTION', 'RESTRICT', 'CASCADE', 'SET NULL']);
   supportsAlterTable(format, {
     addColumn: true,
     dropColumn: true,
@@ -45,11 +44,11 @@ describe('Db2Formatter', () => {
   supportsUpdate(format, { whereCurrentOf: true });
   supportsTruncateTable(format, { withoutTable: true });
   supportsMergeInto(format);
-  supportsStrings(format, ["''", "X''", "U&''", "N''"]);
-  supportsIdentifiers(format, [`""`]);
+  supportsStrings(format, ["''-qq", "X''", "U&''", "N''"]);
+  supportsIdentifiers(format, [`""-qq`]);
   supportsBetween(format);
   supportsSchema(format);
-  supportsOperators(format, Db2Formatter.operators);
+  supportsOperators(format, ['**', '¬=', '¬>', '¬<', '!>', '!<', '||']);
   supportsJoin(format, { without: ['NATURAL'], supportsUsing: false });
   supportsSetOperations(format, [
     'UNION',
@@ -90,6 +89,15 @@ describe('Db2Formatter', () => {
     `);
   });
 
+  it('supports @, #, $ characters at the start of identifiers', () => {
+    expect(format(`SELECT @foo, #bar, $zap`)).toBe(dedent`
+      SELECT
+        @foo,
+        #bar,
+        $zap
+    `);
+  });
+
   it('supports @, #, $ characters in named parameters', () => {
     expect(format(`SELECT :foo@bar, :foo#bar, :foo$bar, :@zip, :#zap, :$zop`)).toBe(dedent`
       SELECT
@@ -104,8 +112,7 @@ describe('Db2Formatter', () => {
 
   it('supports WITH isolation level modifiers for UPDATE statement', () => {
     expect(format('UPDATE foo SET x = 10 WITH CS')).toBe(dedent`
-      UPDATE
-        foo
+      UPDATE foo
       SET
         x = 10
       WITH CS
@@ -119,17 +126,12 @@ describe('Db2Formatter', () => {
          ALTER TABLE t ALTER COLUMN foo SET NOT NULL;`
       )
     ).toBe(dedent`
-      ALTER TABLE
-        t
-      ALTER COLUMN
-        foo
-      SET DATA TYPE
-        VARCHAR;
+      ALTER TABLE t
+      ALTER COLUMN foo
+      SET DATA TYPE VARCHAR;
 
-      ALTER TABLE
-        t
-      ALTER COLUMN
-        foo
+      ALTER TABLE t
+      ALTER COLUMN foo
       SET NOT NULL;
     `);
   });

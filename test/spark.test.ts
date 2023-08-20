@@ -1,24 +1,23 @@
 import dedent from 'dedent-js';
 
-import { format as originalFormat, FormatFn } from 'src/sqlFormatter';
-import SparkFormatter from 'src/languages/spark/spark.formatter';
-import behavesLikeSqlFormatter from './behavesLikeSqlFormatter';
+import { format as originalFormat, FormatFn } from '../src/sqlFormatter.js';
+import behavesLikeSqlFormatter from './behavesLikeSqlFormatter.js';
 
-import supportsAlterTable from './features/alterTable';
-import supportsBetween from './features/between';
-import supportsCreateTable from './features/createTable';
-import supportsDropTable from './features/dropTable';
-import supportsJoin from './features/join';
-import supportsOperators from './features/operators';
-import supportsStrings from './features/strings';
-import supportsArrayAndMapAccessors from './features/arrayAndMapAccessors';
-import supportsComments from './features/comments';
-import supportsIdentifiers from './features/identifiers';
-import supportsSetOperations from './features/setOperations';
-import supportsLimiting from './features/limiting';
-import supportsInsertInto from './features/insertInto';
-import supportsTruncateTable from './features/truncateTable';
-import supportsCreateView from './features/createView';
+import supportsAlterTable from './features/alterTable.js';
+import supportsBetween from './features/between.js';
+import supportsCreateTable from './features/createTable.js';
+import supportsDropTable from './features/dropTable.js';
+import supportsJoin from './features/join.js';
+import supportsOperators from './features/operators.js';
+import supportsStrings from './features/strings.js';
+import supportsArrayAndMapAccessors from './features/arrayAndMapAccessors.js';
+import supportsComments from './features/comments.js';
+import supportsIdentifiers from './features/identifiers.js';
+import supportsSetOperations from './features/setOperations.js';
+import supportsLimiting from './features/limiting.js';
+import supportsInsertInto from './features/insertInto.js';
+import supportsTruncateTable from './features/truncateTable.js';
+import supportsCreateView from './features/createView.js';
 
 describe('SparkFormatter', () => {
   const language = 'spark';
@@ -26,7 +25,7 @@ describe('SparkFormatter', () => {
 
   behavesLikeSqlFormatter(format);
   supportsComments(format);
-  supportsCreateView(format, { orReplace: true });
+  supportsCreateView(format, { orReplace: true, ifNotExists: true });
   supportsCreateTable(format, { ifNotExists: true });
   supportsDropTable(format, { ifExists: true });
   supportsAlterTable(format, {
@@ -36,10 +35,14 @@ describe('SparkFormatter', () => {
   });
   supportsInsertInto(format, { withoutInto: true });
   supportsTruncateTable(format);
-  supportsStrings(format, ["''", '""', "X''", 'X""', "R''", 'R""']);
+  supportsStrings(format, ["''-bs", '""-bs', "X''", 'X""', "R''", 'R""']);
   supportsIdentifiers(format, ['``']);
   supportsBetween(format);
-  supportsOperators(format, SparkFormatter.operators, ['AND', 'OR', 'XOR']);
+  supportsOperators(
+    format,
+    ['%', '~', '^', '|', '&', '<=>', '==', '!', '||', '->'],
+    ['AND', 'OR', 'XOR']
+  );
   supportsArrayAndMapAccessors(format);
   supportsJoin(format, {
     additionally: [
@@ -125,10 +128,8 @@ describe('SparkFormatter', () => {
   it('formats ALTER TABLE ... ALTER COLUMN', () => {
     expect(format(`ALTER TABLE StudentInfo ALTER COLUMN FirstName COMMENT "new comment";`))
       .toBe(dedent`
-      ALTER TABLE
-        StudentInfo
-      ALTER COLUMN
-        FirstName COMMENT "new comment";
+      ALTER TABLE StudentInfo
+      ALTER COLUMN FirstName COMMENT "new comment";
     `);
   });
 });
